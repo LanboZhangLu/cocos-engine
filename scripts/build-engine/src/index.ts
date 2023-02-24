@@ -9,7 +9,7 @@ import commonjs from '@rollup/plugin-commonjs';
 import { terser as rpTerser } from 'rollup-plugin-terser';
 import babelPresetEnv from '@babel/preset-env';
 import type { Options as babelPresetEnvOptions } from '@babel/preset-env';
-import babelPresetCc from '@cocos/babel-preset-cc';
+import { babelPresetCC, helpers } from '@cocos/creator-programming-babel-preset-cc'
 // @ts-expect-error: No typing
 import babelPluginTransformForOf from '@babel/plugin-transform-for-of';
 import * as rollup from 'rollup';
@@ -29,7 +29,9 @@ import { filePathToModuleRequest } from './utils';
 import { assetRef as rpAssetRef, pathToAssetRefURL } from './rollup-plugins/asset-ref';
 import { codeAsset } from './rollup-plugins/code-asset';
 import { ModeType, PlatformType } from './constant-manager';
+import { assetUrl } from './rollup-plugins/asset-url';
 
+export { IOptimizeDecorators } from './config-interface';
 export { ModeType, PlatformType, FlagType, ConstantOptions, BuildTimeConstants, CCEnvConstants } from './constant-manager';
 export { StatsQuery };
 export { ModuleOption, enumerateModuleOptionReps, parseModuleOption };
@@ -275,9 +277,11 @@ async function doBuild ({
 
     // HACK: get platform, mode, flags from build time constants
     const flags: Record<string, any> = {};
-    ['SERVER_MODE', 'NOT_PACK_PHYSX_LIBS', 'DEBUG', 'NET_MODE'].forEach((key) => {
+    ['SERVER_MODE', 'NOT_PACK_PHYSX_LIBS', 'DEBUG', 'NET_MODE', 'WEBGPU'].forEach((key) => {
         flags[key] = buildTimeConstants[key];
     });
+    // Wether use webgpu
+    const useWebGPU = flags['WEBGPU'];
     let platform = options.platform as PlatformType;
     if (!platform) {
         ["HTML5", "NATIVE", "WECHAT", "BAIDU", "XIAOMI", "ALIPAY", "BYTEDANCE", "OPPO", "VIVO", "HUAWEI", "COCOSPLAY", "QTT", "LINKSURE"].some(key => {
@@ -308,6 +312,7 @@ async function doBuild ({
     });
     console.debug(`Module source "internal-constants":\n${vmInternalConstants}`);
     rpVirtualOptions['internal:constants'] = vmInternalConstants;
+    rpVirtualOptions[helpers.CC_HELPER_MODULE] = helpers.generateHelperModuleSource();
 
     const forceStandaloneModules = ['wait-for-ammo-instantiation', 'decorator'];
 
@@ -370,6 +375,8 @@ async function doBuild ({
         } & babel.TransformOptions>,
     }
 
+    const { fieldDecorators, editorDecorators } = statsQuery.getOptimizeDecorators();
+
     const babelOptions: RollupBabelInputPluginOptions & BabelOverrides = {
         babelHelpers: 'bundled',
         extensions: ['.js', '.ts'],
@@ -389,9 +396,12 @@ async function doBuild ({
         plugins: babelPlugins,
         presets: [
             [babelPresetEnv, presetEnvOptions],
-            [babelPresetCc, {
+            [babelPresetCC, {
                 allowDeclareFields: true,
-            } as babelPresetCc.Options],
+                ccDecoratorHelpers: 'external',
+                fieldDecorators,
+                editorDecorators,
+            } as babelPresetCC.Options],
         ],
     };
 
@@ -536,6 +546,11 @@ async function doBuild ({
 
         defaultHandler(warning);
     };
+
+    rollupPlugins.unshift(assetUrl({
+        engineRoot,
+        useWebGPU,
+    }));
 
     const rollupOptions: rollup.InputOptions = {
         input: rollupEntries,

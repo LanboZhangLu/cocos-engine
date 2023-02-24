@@ -1,18 +1,17 @@
 /*
- Copyright (c) 2017-2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2017-2023 Xiamen Yaji Software Co., Ltd.
 
  http://www.cocos.com
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
-  worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
-  not use Cocos Creator software for developing other software or tools that's
-  used for developing games. You are not granted to publish, distribute,
-  sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -27,20 +26,19 @@ import { Material } from '../../asset/assets/material';
 import { RenderingSubMesh } from '../../asset/assets/rendering-sub-mesh';
 import { Mesh } from '../assets/mesh';
 import { Skeleton } from '../assets/skeleton';
-import { AABB } from '../../core/geometry';
+import { geometry, Mat4, Vec3, warnID } from '../../core';
 import { BufferUsageBit, MemoryUsageBit, DescriptorSet, Buffer, BufferInfo, Attribute, FormatFeatureBit, Format } from '../../gfx';
-import { Mat4, Vec3 } from '../../core/math';
-import { UBOSkinning, UNIFORM_REALTIME_JOINT_TEXTURE_BINDING } from '../../core/pipeline/define';
-import { Node } from '../../core/scene-graph/node';
+import { UBOSkinning, UNIFORM_REALTIME_JOINT_TEXTURE_BINDING } from '../../rendering/define';
+import { Node } from '../../scene-graph/node';
 import { ModelType } from '../../render-scene/scene/model';
 import { uploadJointData } from '../skeletal-animation/skeletal-animation-utils';
 import { MorphModel } from './morph-model';
 import { deleteTransform, getTransform, getWorldMatrix, IJointTransform } from '../../animation/skeletal-animation-utils';
 import { IMacroPatch, BatchingSchemes, Pass } from '../../render-scene';
-import { warnID } from '../../core/platform/debug';
-import { director } from '../../core';
+import { director } from '../../game';
 import { PixelFormat } from '../../asset/assets/asset-enum';
 import { Texture2D, ImageAsset } from '../../asset/assets';
+import { SubModel } from '../../render-scene/scene';
 
 const uniformPatches: IMacroPatch[] = [
     { name: 'CC_USE_SKINNING', value: true },
@@ -66,7 +64,7 @@ function getRelevantBuffers (outIndices: number[], outBuffers: number[], jointMa
 }
 
 interface IJointInfo {
-    bound: AABB;
+    bound: geometry.AABB;
     target: Node;
     bindpose: Mat4;
     transform: IJointTransform;
@@ -79,7 +77,7 @@ const v3_max = new Vec3();
 const v3_1 = new Vec3();
 const v3_2 = new Vec3();
 const m4_1 = new Mat4();
-const ab_1 = new AABB();
+const ab_1 = new geometry.AABB();
 
 class RealTimeJointTexture {
     public static readonly WIDTH = 256;
@@ -183,7 +181,7 @@ export class SkinningModel extends MorphModel {
         for (let i = 0; i < this._joints.length; i++) {
             const { bound, transform } = this._joints[i];
             const worldMatrix = getWorldMatrix(transform, stamp);
-            AABB.transform(ab_1, bound, worldMatrix);
+            geometry.AABB.transform(ab_1, bound, worldMatrix);
             ab_1.getBoundary(v3_1, v3_2);
             Vec3.min(v3_min, v3_min, v3_1);
             Vec3.max(v3_max, v3_max, v3_2);
@@ -191,7 +189,7 @@ export class SkinningModel extends MorphModel {
 
         const worldBounds = this._worldBounds;
         if (this._modelBounds && worldBounds) {
-            AABB.fromPoints(this._modelBounds, v3_min, v3_max);
+            geometry.AABB.fromPoints(this._modelBounds, v3_min, v3_max);
             // @ts-expect-error TS2445
             this._modelBounds.transform(root._mat, root._pos, root._rot, root._scale, this._worldBounds);
         }
@@ -264,12 +262,13 @@ export class SkinningModel extends MorphModel {
         }
     }
 
-    protected _updateInstancedAttributes (attributes: Attribute[], pass: Pass) {
+    protected _updateInstancedAttributes (attributes: Attribute[], subModel: SubModel) {
+        const pass = subModel.passes[0];
         if (pass.batchingScheme !== BatchingSchemes.NONE) {
             // TODO(holycanvas): #9203 better to print the complete path instead of only the current node
             warnID(3936, this.node.getPathInHierarchy());
         }
-        super._updateInstancedAttributes(attributes, pass);
+        super._updateInstancedAttributes(attributes, subModel);
     }
 
     private _ensureEnoughBuffers (count: number) {

@@ -1,18 +1,17 @@
 /*
- Copyright (c) 2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2020-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -21,11 +20,9 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- */
+*/
 
-import { AABB } from '../../core/geometry';
-import { legacyCC } from '../../core/global-exports';
-import { Vec3 } from '../../core/math';
+import { Vec3, cclegacy, geometry } from '../../core';
 import { Light, LightType, nt2lm } from './light';
 
 /**
@@ -73,7 +70,7 @@ export class SphereLight extends Light {
      * @zh 光源的亮度
      */
     get luminance (): number {
-        const isHDR = (legacyCC.director.root).pipeline.pipelineSceneData.isHDR;
+        const isHDR = (cclegacy.director.root).pipeline.pipelineSceneData.isHDR;
         if (isHDR) {
             return this._luminanceHDR;
         } else {
@@ -81,7 +78,7 @@ export class SphereLight extends Light {
         }
     }
     set luminance (value: number) {
-        const isHDR = (legacyCC.director.root).pipeline.pipelineSceneData.isHDR;
+        const isHDR = (cclegacy.director.root).pipeline.pipelineSceneData.isHDR;
         if (isHDR) {
             this.luminanceHDR = value;
         } else {
@@ -122,11 +119,11 @@ export class SphereLight extends Light {
     protected _luminanceHDR = 0;
     protected _luminanceLDR = 0;
     protected _pos: Vec3;
-    protected _aabb: AABB;
+    protected _aabb: geometry.AABB;
 
     constructor () {
         super();
-        this._aabb = AABB.create();
+        this._aabb = geometry.AABB.create();
         this._pos = new Vec3();
         this._type = LightType.SPHERE;
     }
@@ -149,7 +146,7 @@ export class SphereLight extends Light {
         if (this._node && (this._node.hasChangedFlags || this._needUpdate)) {
             this._node.getWorldPosition(this._pos);
             const range = this._range;
-            AABB.set(this._aabb, this._pos.x, this._pos.y, this._pos.z, range, range, range);
+            geometry.AABB.set(this._aabb, this._pos.x, this._pos.y, this._pos.z, range, range, range);
             this._needUpdate = false;
         }
     }

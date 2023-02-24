@@ -1,18 +1,17 @@
 /*
- Copyright (c) 2021 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2021-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
-  worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
-  not use Cocos Creator software for developing other software or tools that's
-  used for developing games. You are not granted to publish, distribute,
-  sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -24,14 +23,8 @@
 */
 import { ccclass, serializable } from 'cc.decorator';
 
-import { legacyCC } from '../../core/global-exports';
-import { CallbacksInvoker } from '../../core/event/callbacks-invoker';
-import { applyMixins } from '../../core/event/event-target-factory';
-import { createMap } from '../../core/utils/js-typed';
-import { property } from '../../core/data/class-decorator';
+import { cclegacy, js, _decorator, path, jsbUtils, CallbacksInvoker, applyMixins } from '../../core';
 import { getUrlWithUuid } from '../asset-manager/helper';
-import { extname } from '../../core/utils/path';
-import { ExtraEventMethods } from '../../core/utils/jsb-utils'
 
 declare const jsb: any;
 
@@ -41,18 +34,19 @@ declare const jsb: any;
  */
 export type CreateNodeCallback = (error: Error | null, node: Node) => void;
 
-applyMixins(jsb.Asset, [CallbacksInvoker, ExtraEventMethods]);
+applyMixins(jsb.Asset, [CallbacksInvoker, jsbUtils.ExtraEventMethods]);
 
 const assetProto: any = jsb.Asset.prototype;
 
 assetProto._ctor = function () {
+    this.loaded = true; // deprecated in v3.3
     this._ref = 0;
     this.__nativeRefs = {};
     this.__jsb_ref_id = undefined;
     this._iN$t = null;
     this.__editorExtras__ = { editorOnly: true };
 
-    this._callbackTable = createMap(true);
+    this._callbackTable = js.createMap(true);
     this._file = null;
     // for deserialization
     // _initializerDefineProperty(_this, "_native", _descriptor$1, _assertThisInitialized(_this));
@@ -82,7 +76,7 @@ Object.defineProperty (assetProto, 'nativeUrl', {
                 this._nativeUrl = getUrlWithUuid(this._uuid, { nativeExt: name, isNative: true });
             } else {
                 // imported in an independent dir
-                this._nativeUrl = getUrlWithUuid(this._uuid, { __nativeName__: name, nativeExt: extname(name), isNative: true });
+                this._nativeUrl = getUrlWithUuid(this._uuid, { __nativeName__: name, nativeExt: path.extname(name), isNative: true });
             }
         }
         return this._nativeUrl;
@@ -109,7 +103,7 @@ assetProto.decRef = function (autoRelease = true): Asset {
         this._ref--;
     }
     if (autoRelease) {
-        legacyCC.assetManager._releaseManager.tryRelease(this);
+        cclegacy.assetManager._releaseManager.tryRelease(this);
     }
     return this;
 };
@@ -124,11 +118,11 @@ assetProto.createNode = null!;
 export type Asset = jsb.Asset;
 export const Asset = jsb.Asset;
 
-legacyCC.Asset = jsb.Asset;
+cclegacy.Asset = jsb.Asset;
 
 // handle meta data, it is generated automatically
 const AssetProto = Asset.prototype;
-serializable(AssetProto, '_native');
+serializable(AssetProto, '_native', () => '');
 const _nativeAssetDescriptor = Object.getOwnPropertyDescriptor(AssetProto, '_nativeAsset');
-property(AssetProto, '_nativeAsset', _nativeAssetDescriptor);
+_decorator.property(AssetProto, '_nativeAsset', _nativeAssetDescriptor);
 ccclass('cc.Asset')(Asset);

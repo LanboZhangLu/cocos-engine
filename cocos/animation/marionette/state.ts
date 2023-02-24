@@ -1,15 +1,40 @@
-import { ccclass, serializable } from 'cc.decorator';
+/*
+ Copyright (c) 2022-2023 Xiamen Yaji Software Co., Ltd.
+
+ https://www.cocos.com/
+
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
+
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
+
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ THE SOFTWARE.
+*/
+
 import { OwnedBy, ownerSymbol } from './ownership';
 import type { Layer, StateMachine, TransitionInternal } from './animation-graph';
-import { EditorExtendable } from '../../core/data/editor-extendable';
+import { EditorExtendable, js, editorExtrasTag, _decorator } from '../../core';
 import { CLASS_NAME_PREFIX_ANIM } from '../define';
 import { StateMachineComponent } from './state-machine-component';
-import { remove } from '../../core/utils/array';
-import { instantiate } from '../../core/data/instantiate';
+import { instantiate } from '../../serialization/instantiate';
+import { cloneAnimationGraphEditorExtrasFrom } from './animation-graph-editor-extras-clone-helper';
 
 export const outgoingsSymbol = Symbol('[[Outgoing transitions]]');
 
 export const incomingsSymbol = Symbol('[[Incoming transitions]]');
+
+const { ccclass, serializable } = _decorator;
 
 @ccclass('cc.animation.State')
 export class State extends EditorExtendable implements OwnedBy<Layer | StateMachine> {
@@ -24,6 +49,11 @@ export class State extends EditorExtendable implements OwnedBy<Layer | StateMach
 
     constructor () {
         super();
+    }
+
+    public copyTo (that: State) {
+        that.name = this.name;
+        that[editorExtrasTag] = cloneAnimationGraphEditorExtrasFrom(this);
     }
 }
 
@@ -42,7 +72,7 @@ export class InteractiveState extends State {
     }
 
     public removeComponent (component: StateMachineComponent) {
-        remove(this._components, component);
+        js.array.remove(this._components, component);
     }
 
     public instantiateComponents (): StateMachineComponent[] {
@@ -52,6 +82,11 @@ export class InteractiveState extends State {
             return instantiated;
         });
         return instantiatedComponents;
+    }
+
+    public copyTo (that: InteractiveState) {
+        super.copyTo(that);
+        that._components = this.instantiateComponents();
     }
 
     @serializable

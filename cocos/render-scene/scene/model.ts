@@ -1,18 +1,17 @@
 /*
- Copyright (c) 2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -21,23 +20,27 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- */
+*/
 
 // Copyright (c) 2017-2020 Xiamen Yaji Software Co., Ltd.
+import { EDITOR } from 'internal:constants';
 import { builtinResMgr } from '../../asset/asset-manager/builtin-res-mgr';
 import { Material } from '../../asset/assets/material';
 import { RenderingSubMesh } from '../../asset/assets/rendering-sub-mesh';
-import { AABB } from '../../core/geometry/aabb';
-import { Node } from '../../core/scene-graph';
-import { Layers } from '../../core/scene-graph/layers';
+import { Node } from '../../scene-graph';
+import { Layers } from '../../scene-graph/layers';
 import { RenderScene } from '../core/render-scene';
 import { Texture2D } from '../../asset/assets/texture-2d';
 import { SubModel } from './submodel';
-import { Pass, IMacroPatch, BatchingSchemes } from '../core/pass';
-import { Mat4, Vec3, Vec4 } from '../../core/math';
-import { Attribute, DescriptorSet, Device, Buffer, BufferInfo, getTypedArrayConstructor,
-    BufferUsageBit, FormatInfos, MemoryUsageBit, Filter, Address, Feature, SamplerInfo, deviceManager } from '../../gfx';
-import { INST_MAT_WORLD, UBOLocal, UBOWorldBound, UNIFORM_LIGHTMAP_TEXTURE_BINDING } from '../../core/pipeline/define';
+import { IMacroPatch } from '../core/pass';
+import { Mat4, Vec3, Vec4, geometry, cclegacy, EPSILON } from '../../core';
+import { Attribute, DescriptorSet, Device, Buffer, BufferInfo,
+    BufferUsageBit, MemoryUsageBit, Filter, Address, SamplerInfo, deviceManager, Texture } from '../../gfx';
+import { UBOLocal, UBOSH, UBOWorldBound, UNIFORM_LIGHTMAP_TEXTURE_BINDING, UNIFORM_REFLECTION_PROBE_CUBEMAP_BINDING, UNIFORM_REFLECTION_PROBE_DATA_MAP_BINDING, UNIFORM_REFLECTION_PROBE_TEXTURE_BINDING } from '../../rendering/define';
+import { Root } from '../../root';
+import { TextureCube } from '../../asset/assets';
+import { ShadowType } from './shadows';
+import { ProbeType, ReflectionProbe } from './reflection-probe';
 
 const m4_1 = new Mat4();
 
@@ -45,16 +48,23 @@ const shadowMapPatches: IMacroPatch[] = [
     { name: 'CC_RECEIVE_SHADOW', value: true },
 ];
 
-const lightMapPatches: IMacroPatch[] = [
-    { name: 'CC_USE_LIGHTMAP', value: true },
+const staticLightMapPatches: IMacroPatch[] = [
+    { name: 'CC_USE_LIGHTMAP', value: 1 },
 ];
 
-export interface IInstancedAttributeBlock {
-    buffer: Uint8Array;
-    views: TypedArray[];
-    attributes: Attribute[];
-}
+const stationaryLightMapPatches: IMacroPatch[] = [
+    { name: 'CC_USE_LIGHTMAP', value: 2 },
+];
 
+const highpLightMapPatches: IMacroPatch[] = [
+    { name: 'CC_LIGHT_MAP_VERSION', value: 2 },
+];
+
+const lightProbePatches: IMacroPatch[] = [
+    { name: 'CC_USE_LIGHT_PROBE', value: true },
+];
+const CC_USE_REFLECTION_PROBE = 'CC_USE_REFLECTION_PROBE';
+const CC_RECEIVE_DIRECTIONAL_LIGHT = 'CC_RECEIVE_DIRECTIONAL_LIGHT';
 export enum ModelType {
     DEFAULT,
     SKINNING,
@@ -62,12 +72,6 @@ export enum ModelType {
     BATCH_2D,
     PARTICLE_BATCH,
     LINE,
-}
-
-function uploadMat4AsVec4x3 (mat: Mat4, v1: ArrayBufferView, v2: ArrayBufferView, v3: ArrayBufferView) {
-    v1[0] = mat.m00; v1[1] = mat.m01; v1[2] = mat.m02; v1[3] = mat.m12;
-    v2[0] = mat.m04; v2[1] = mat.m05; v2[2] = mat.m06; v2[3] = mat.m13;
-    v3[0] = mat.m08; v3[1] = mat.m09; v3[2] = mat.m10; v3[3] = mat.m14;
 }
 
 const lightmapSamplerHash = new SamplerInfo(
@@ -142,6 +146,14 @@ export class Model {
     }
 
     /**
+     * @en The SH ubo buffer of the model
+     * @zh 获取模型的球谐 ubo 缓冲
+     */
+    get localSHBuffer () {
+        return this._localSHBuffer;
+    }
+
+    /**
      * @en The world bound ubo buffer
      * @zh 获取世界包围盒 ubo 缓冲
      */
@@ -158,11 +170,28 @@ export class Model {
     }
 
     /**
-     * @en Whether GPU instancing is enabled for the current model
-     * @zh 是否开启实例化渲染
+     * @en Use LightProbe or not
+     * @zh 光照探针开关
      */
-    get isInstancingEnabled () {
-        return this._instMatWorldIdx >= 0;
+    get useLightProbe () {
+        return this._useLightProbe;
+    }
+
+    set useLightProbe (val) {
+        this._useLightProbe = val;
+        this.onMacroPatchesStateChanged();
+    }
+
+    /**
+     * @en located tetrahedron index
+     * @zh 模型所处的四面体索引
+     */
+    get tetrahedronIndex () {
+        return this._tetrahedronIndex;
+    }
+
+    set tetrahedronIndex (index: number) {
+        this._tetrahedronIndex = index;
     }
 
     /**
@@ -215,10 +244,22 @@ export class Model {
     }
 
     /**
+     * @en Gets or sets receive direction Light.
+     * @zh 获取或者设置接收平行光光照。
+     */
+    get receiveDirLight (): boolean {
+        return this._receiveDirLight;
+    }
+    set receiveDirLight (val) {
+        this._receiveDirLight = val;
+        this.onMacroPatchesStateChanged();
+    }
+
+    /**
      * @en The node to which the model belongs
      * @zh 模型所在的节点
      */
-    get node () : Node {
+    get node (): Node {
         return this._node;
     }
 
@@ -230,7 +271,7 @@ export class Model {
      * @en Model's transform
      * @zh 模型的变换
      */
-    get transform () : Node {
+    get transform (): Node {
         return this._transform;
     }
 
@@ -245,7 +286,7 @@ export class Model {
      * @zh 模型的可见性标志
      * 模型的可见性标志与 [[Node.layer]] 不同，它会在剔除阶段与 [[Camera.visibility]] 进行比较
      */
-    get visFlags () : number {
+    get visFlags (): number {
         return this._visFlags;
     }
 
@@ -257,7 +298,7 @@ export class Model {
      * @en Whether the model is enabled in the render scene so that it will be rendered
      * @zh 模型是否在渲染场景中启用并被渲染
      */
-    get enabled () : boolean {
+    get enabled (): boolean {
         return this._enabled;
     }
 
@@ -269,12 +310,53 @@ export class Model {
      * @en Rendering priority in the transparent queue of model.
      * @zh Model 在透明队列中的渲染排序优先级
      */
-    get priority () : number {
+    get priority (): number {
         return this._priority;
     }
 
     set priority (val: number) {
         this._priority = val;
+    }
+
+    /**
+     * @en Whether the model can be render by the reflection probe
+     * @zh 模型是否能被反射探针渲染
+     */
+    get bakeToReflectionProbe () {
+        return this._bakeToReflectionProbe;
+    }
+
+    set bakeToReflectionProbe (val) {
+        this._bakeToReflectionProbe = val;
+    }
+
+    /**
+     * @en Reflection probe type
+     * @zh 反射探针类型。
+     */
+    get reflectionProbeType () {
+        return this._reflectionProbeType;
+    }
+
+    set reflectionProbeType (val) {
+        this._reflectionProbeType = val;
+        const subModels = this._subModels;
+        for (let i = 0; i < subModels.length; i++) {
+            subModels[i].useReflectionProbeType = val;
+        }
+        this.onMacroPatchesStateChanged();
+    }
+
+    /**
+     * @en sets or gets reflection probe id
+     * @zh 设置或获取反射探针id。
+     */
+    get reflectionProbeId () {
+        return this._reflectionProbeId;
+    }
+
+    set reflectionProbeId (val) {
+        this._reflectionProbeId = val;
     }
 
     /**
@@ -296,22 +378,16 @@ export class Model {
     public isDynamicBatching = false;
 
     /**
-     * @en The instance attributes
-     * @zh 实例化属性
-     */
-    public instancedAttributes: IInstancedAttributeBlock = { buffer: null!, views: [], attributes: [] };
-
-    /**
      * @en The world axis-aligned bounding box
      * @zh 世界空间包围盒
      */
-    protected _worldBounds: AABB | null = null;
+    protected _worldBounds: geometry.AABB | null = null;
 
     /**
      * @en The model axis-aligned bounding box
      * @zh 模型空间包围盒
      */
-    protected _modelBounds: AABB | null = null;
+    protected _modelBounds: geometry.AABB | null = null;
 
     /**
      * @en Sub models
@@ -374,12 +450,27 @@ export class Model {
     protected _localBuffer: Buffer | null = null;
 
     /**
-     * @en Instance matrix id
-     * @zh 实例矩阵索引
+     * @en Local SH ubo data
+     * @zh 本地球谐 ubo 数据
      */
-    private _instMatWorldIdx = -1;
+    protected _localSHData: Float32Array | null = null;
+
+    /**
+     * @en Local SH ubo buffer
+     * @zh 本地球谐 ubo 缓冲
+     */
+    protected _localSHBuffer: Buffer | null = null;
+
     private _lightmap: Texture2D | null = null;
     private _lightmapUVParam: Vec4 = new Vec4();
+
+    /**
+     * @en located tetrahedron index
+     * @zh 所处的四面体索引
+     */
+    private _tetrahedronIndex = -1;
+    private _lastWorldBoundCenter = new Vec3(Infinity, Infinity, Infinity);
+    private _useLightProbe = false;
 
     /**
      * @en World AABB buffer
@@ -400,6 +491,12 @@ export class Model {
     protected _castShadow = false;
 
     /**
+     * @en Is received direction Light.
+     * @zh 是否接收平行光光照。
+     */
+    protected _receiveDirLight = true;
+
+    /**
      * @en Shadow bias
      * @zh 阴影偏移
      */
@@ -410,6 +507,12 @@ export class Model {
      * @zh 阴影法线偏移
      */
     protected _shadowNormalBias = 0;
+
+    /**
+     * @en Reflect probe Id
+     * @zh 使用第几个反射探针
+     */
+    protected _reflectionProbeId = -1;
 
     /**
      * @en Whether the model is enabled in the render scene so that it will be rendered
@@ -424,6 +527,18 @@ export class Model {
     protected _visFlags = Layers.Enum.NONE;
 
     protected _priority = 0;
+
+    /**
+     * @en Whether the model can be render by the reflection probe
+     * @zh 模型是否能被反射探针渲染
+     */
+    protected _bakeToReflectionProbe = true;
+
+    /**
+     * @en Reflection probe type.
+     * @zh 反射探针类型。
+     */
+    protected _reflectionProbeType = 0;
 
     /**
      * @internal
@@ -457,6 +572,8 @@ export class Model {
         this.enabled = true;
         this.visFlags = Layers.Enum.NONE;
         this._inited = true;
+        this._bakeToReflectionProbe = true;
+        this._reflectionProbeType = 0;
     }
 
     /**
@@ -471,6 +588,10 @@ export class Model {
         if (this._localBuffer) {
             this._localBuffer.destroy();
             this._localBuffer = null;
+        }
+        if (this._localSHBuffer) {
+            this._localSHBuffer.destroy();
+            this._localSHBuffer = null;
         }
         if (this._worldBoundBuffer) {
             this._worldBoundBuffer.destroy();
@@ -552,22 +673,124 @@ export class Model {
         }
         this._updateStamp = stamp;
 
+        this.updateSHUBOs();
+        const forceUpdateUBO = this.node.scene.globals.shadows.enabled && this.node.scene.globals.shadows.type === ShadowType.Planar;
+
         if (!this._localDataUpdated) { return; }
         this._localDataUpdated = false;
 
         // @ts-expect-error using private members here for efficiency
         const worldMatrix = this.transform._mat;
-        const idx = this._instMatWorldIdx;
-        if (idx >= 0) {
-            const attrs = this.instancedAttributes.views;
-            uploadMat4AsVec4x3(worldMatrix, attrs[idx], attrs[idx + 1], attrs[idx + 2]);
-        } else if (this._localBuffer) {
+        let hasNonInstancingPass = false;
+        for (let i = 0; i < subModels.length; i++) {
+            const subModel = subModels[i];
+            const idx = subModel.instancedWorldMatrixIndex;
+            if (idx >= 0) {
+                subModel.updateInstancedWorldMatrix(worldMatrix, idx);
+            } else {
+                hasNonInstancingPass = true;
+            }
+        }
+        if ((hasNonInstancingPass || forceUpdateUBO) && this._localBuffer) {
             Mat4.toArray(this._localData, worldMatrix, UBOLocal.MAT_WORLD_OFFSET);
             Mat4.inverseTranspose(m4_1, worldMatrix);
 
             Mat4.toArray(this._localData, m4_1, UBOLocal.MAT_WORLD_IT_OFFSET);
             this._localBuffer.update(this._localData);
         }
+    }
+
+    public showTetrahedron () {
+        return this.isLightProbeAvailable();
+    }
+
+    private isLightProbeAvailable () {
+        if (!this._useLightProbe) {
+            return false;
+        }
+
+        const lightProbes = (cclegacy.director.root as Root).pipeline.pipelineSceneData.lightProbes;
+        if (!lightProbes || lightProbes.empty()) {
+            return false;
+        }
+
+        if (!this._worldBounds) {
+            return false;
+        }
+
+        return true;
+    }
+
+    private updateSHBuffer () {
+        if (!this._localSHData) {
+            return;
+        }
+
+        const subModels = this._subModels;
+        let hasNonInstancingPass = false;
+        for (let i = 0; i < subModels.length; i++) {
+            const subModel = subModels[i];
+            const idx = subModel.instancedSHIndex;
+            if (idx >= 0) {
+                subModel.updateInstancedSH(this._localSHData, idx);
+            } else {
+                hasNonInstancingPass = true;
+            }
+        }
+
+        if (hasNonInstancingPass && this._localSHBuffer) {
+            this._localSHBuffer.update(this._localSHData);
+        }
+    }
+
+    /**
+     * @en Clear the model's SH ubo
+     * @zh 清除模型的球谐 ubo
+     */
+    public clearSHUBOs () {
+        if (!this._localSHData) {
+            return;
+        }
+
+        for (let i = 0; i < UBOSH.COUNT; i++) {
+            this._localSHData[i] = 0.0;
+        }
+
+        this.updateSHBuffer();
+    }
+
+    /**
+     * @en Update the model's SH ubo
+     * @zh 更新模型的球谐 ubo
+     */
+    public updateSHUBOs () {
+        if (!this.isLightProbeAvailable()) {
+            return;
+        }
+
+        const center = this._worldBounds!.center;
+        if (!EDITOR && center.equals(this._lastWorldBoundCenter, EPSILON)) {
+            return;
+        }
+
+        const coefficients: Vec3[] = [];
+        const weights = new Vec4(0.0, 0.0, 0.0, 0.0);
+        const lightProbes = (cclegacy.director.root as Root).pipeline.pipelineSceneData.lightProbes;
+
+        this._lastWorldBoundCenter.set(center);
+        this._tetrahedronIndex = lightProbes.data!.getInterpolationWeights(center, this._tetrahedronIndex, weights);
+        const result = lightProbes.data!.getInterpolationSHCoefficients(this._tetrahedronIndex, weights, coefficients);
+        if (!result) {
+            return;
+        }
+
+        if (!this._localSHData) {
+            return;
+        }
+
+        cclegacy.internal.SH.reduceRinging(coefficients, lightProbes.reduceRinging);
+        cclegacy.internal.SH.updateUBOData(this._localSHData, UBOSH.SH_LINEAR_CONST_R_OFFSET, coefficients);
+        this.updateSHBuffer();
     }
 
     /**
@@ -578,8 +801,8 @@ export class Model {
      */
     public createBoundingShape (minPos?: Vec3, maxPos?: Vec3) {
         if (!minPos || !maxPos) { return; }
-        this._modelBounds = AABB.fromPoints(AABB.create(), minPos, maxPos);
-        this._worldBounds = AABB.clone(this._modelBounds);
+        this._modelBounds = geometry.AABB.fromPoints(geometry.AABB.create(), minPos, maxPos);
+        this._worldBounds = geometry.AABB.clone(this._modelBounds);
     }
 
     private _createSubModel () {
@@ -596,10 +819,8 @@ export class Model {
     public initSubModel (idx: number, subMeshData: RenderingSubMesh, mat: Material) {
         this.initialize();
 
-        let isNewSubModel = false;
         if (this._subModels[idx] == null) {
             this._subModels[idx] = this._createSubModel();
-            isNewSubModel = true;
         } else {
             this._subModels[idx].destroy();
         }
@@ -690,7 +911,7 @@ export class Model {
 
         this.onMacroPatchesStateChanged();
 
-        if (texture === null) {
+        if (!texture) {
             texture = builtinResMgr.get<Texture2D>('empty-texture');
         }
 
@@ -708,6 +929,93 @@ export class Model {
     }
 
     /**
+     * @en Update the cube map of the reflection probe
+     * @zh 更新反射探针的立方体贴图
+     * @param texture probe cubemap
+     */
+    public updateReflectionProbeCubemap (texture: TextureCube | null) {
+        this._localDataUpdated = true;
+        this.onMacroPatchesStateChanged();
+
+        if (!texture) {
+            texture = builtinResMgr.get<TextureCube>('default-cube-texture');
+        }
+
+        const gfxTexture = texture.getGFXTexture();
+        if (gfxTexture) {
+            const reflectionSampler = this._device.getSampler(texture.getSamplerInfo());
+            const subModels = this._subModels;
+            for (let i = 0; i < subModels.length; i++) {
+                const { descriptorSet } = subModels[i];
+                if (descriptorSet) {
+                    descriptorSet.bindSampler(UNIFORM_REFLECTION_PROBE_CUBEMAP_BINDING, reflectionSampler);
+                    descriptorSet.bindTexture(UNIFORM_REFLECTION_PROBE_CUBEMAP_BINDING, gfxTexture);
+                    descriptorSet.update();
+                }
+            }
+        }
+    }
+
+    /**
+     * @en Update the planar relflection map of the reflection probe
+     * @zh 更新反射探针的平面反射贴图
+     * @param texture planar relflection map
+     */
+    public updateReflectionProbePlanarMap (texture: Texture | null) {
+        this._localDataUpdated = true;
+        this.onMacroPatchesStateChanged();
+
+        const sampler = this._device.getSampler(new SamplerInfo(
+            Filter.LINEAR,
+            Filter.LINEAR,
+            Filter.NONE,
+            Address.CLAMP,
+            Address.CLAMP,
+            Address.CLAMP,
+        ));
+        if (!texture) {
+            texture = builtinResMgr.get<Texture2D>('empty-texture').getGFXTexture()!;
+        }
+        if (texture) {
+            const subModels = this._subModels;
+            for (let i = 0; i < subModels.length; i++) {
+                const { descriptorSet } = subModels[i];
+                if (descriptorSet) {
+                    descriptorSet.bindTexture(UNIFORM_REFLECTION_PROBE_TEXTURE_BINDING, texture);
+                    descriptorSet.bindSampler(UNIFORM_REFLECTION_PROBE_TEXTURE_BINDING, sampler);
+                    descriptorSet.update();
+                }
+            }
+        }
+    }
+
+    /**
+     * @en Update the data map of the reflection probe
+     * @zh 更新反射探针的数据贴图
+     * @param texture data map
+     */
+    public updateReflectionProbeDataMap (texture: Texture2D | null) {
+        this._localDataUpdated = true;
+        this.onMacroPatchesStateChanged();
+
+        if (!texture) {
+            texture = builtinResMgr.get<Texture2D>('empty-texture');
+        }
+        const gfxTexture = texture.getGFXTexture();
+        if (gfxTexture) {
+            const subModels = this._subModels;
+            for (let i = 0; i < subModels.length; i++) {
+                const { descriptorSet } = subModels[i];
+                if (descriptorSet) {
+                    descriptorSet.bindTexture(UNIFORM_REFLECTION_PROBE_DATA_MAP_BINDING, gfxTexture);
+                    descriptorSet.bindSampler(UNIFORM_REFLECTION_PROBE_DATA_MAP_BINDING, texture.getGFXSampler());
+                    descriptorSet.update();
+                }
+            }
+        }
+    }
+
+    /**
      * @en Update the shadow bias
      * @zh 更新阴影偏移
      */
@@ -715,8 +1023,44 @@ export class Model {
         const sv = this._localData;
         sv[UBOLocal.LOCAL_SHADOW_BIAS + 0] = this._shadowBias;
         sv[UBOLocal.LOCAL_SHADOW_BIAS + 1] = this._shadowNormalBias;
-        sv[UBOLocal.LOCAL_SHADOW_BIAS + 2] = 0;
+        this._localDataUpdated = true;
+    }
+
+    /**
+     * @en Update the id of reflection probe
+     * @zh 更新物体使用哪个反射探针
+     */
+    public updateReflectionProbeId  () {
+        const sv = this._localData;
+        sv[UBOLocal.LOCAL_SHADOW_BIAS + 2] = this._reflectionProbeId;
         sv[UBOLocal.LOCAL_SHADOW_BIAS + 3] = 0;
+        let probe: ReflectionProbe | null = null;
+        if (cclegacy.internal.reflectionProbeManager) {
+            probe = cclegacy.internal.reflectionProbeManager.getProbeById(this._reflectionProbeId);
+        }
+        if (probe) {
+            if (probe.probeType === ProbeType.PLANAR) {
+                sv[UBOLocal.REFLECTION_PROBE_DATA1] = probe.node.up.x;
+                sv[UBOLocal.REFLECTION_PROBE_DATA1 + 1] = probe.node.up.y;
+                sv[UBOLocal.REFLECTION_PROBE_DATA1 + 2] = probe.node.up.z;
+                sv[UBOLocal.REFLECTION_PROBE_DATA1 + 3] = 1.0;
+
+                sv[UBOLocal.REFLECTION_PROBE_DATA2] = 1.0;
+                sv[UBOLocal.REFLECTION_PROBE_DATA2 + 1] = 0.0;
+                sv[UBOLocal.REFLECTION_PROBE_DATA2 + 2] = 0.0;
+                sv[UBOLocal.REFLECTION_PROBE_DATA2 + 3] = 1.0;
+            } else {
+                sv[UBOLocal.REFLECTION_PROBE_DATA1] = probe.node.worldPosition.x;
+                sv[UBOLocal.REFLECTION_PROBE_DATA1 + 1] = probe.node.worldPosition.y;
+                sv[UBOLocal.REFLECTION_PROBE_DATA1 + 2] = probe.node.worldPosition.z;
+                sv[UBOLocal.REFLECTION_PROBE_DATA1 + 3] = 0.0;
+
+                sv[UBOLocal.REFLECTION_PROBE_DATA2] = probe.size.x;
+                sv[UBOLocal.REFLECTION_PROBE_DATA2 + 1] = probe.size.y;
+                sv[UBOLocal.REFLECTION_PROBE_DATA2 + 2] = probe.size.z;
+                sv[UBOLocal.REFLECTION_PROBE_DATA2 + 3] = probe.cubemap ? probe.cubemap.mipmapLevel : 1.0;
+            }
+        }
         this._localDataUpdated = true;
     }
 
@@ -728,8 +1072,31 @@ export class Model {
     public getMacroPatches (subModelIndex: number): IMacroPatch[] | null {
         let patches = this.receiveShadow ? shadowMapPatches : null;
         if (this._lightmap != null) {
-            patches = patches ? patches.concat(lightMapPatches) : lightMapPatches;
+            let stationary = false;
+            if (this.node && this.node.scene) {
+                stationary = this.node.scene.globals.bakedWithStationaryMainLight;
+            }
+
+            const lightmapPathes = stationary ? stationaryLightMapPatches : staticLightMapPatches;
+            patches = patches ? patches.concat(lightmapPathes) : lightmapPathes;
+
+            // use highp lightmap
+            if (this.node.scene.globals.bakedWithHighpLightmap) {
+                patches = patches.concat(highpLightMapPatches);
+            }
         }
+        if (this._useLightProbe) {
+            patches = patches ? patches.concat(lightProbePatches) : lightProbePatches;
+        }
+        const reflectionProbePatches: IMacroPatch[] = [
+            { name: CC_USE_REFLECTION_PROBE, value: this._reflectionProbeType },
+        ];
+        patches = patches ? patches.concat(reflectionProbePatches) : reflectionProbePatches;
+        const receiveDirLightPatches: IMacroPatch[] = [
+            { name: CC_RECEIVE_DIRECTIONAL_LIGHT, value: this._receiveDirLight },
+        ];
+        patches = patches ? patches.concat(receiveDirLightPatches) : receiveDirLightPatches;
+
         return patches;
     }
 
@@ -740,6 +1107,9 @@ export class Model {
         this._initLocalDescriptors(subModelIndex);
         this._updateLocalDescriptors(subModelIndex, subModel.descriptorSet);
 
+        this._initLocalSHDescriptors(subModelIndex);
+        this._updateLocalSHDescriptors(subModelIndex, subModel.descriptorSet);
+
         this._initWorldBoundDescriptors(subModelIndex);
 
         if (subModel.worldBoundDescriptorSet) {
@@ -747,57 +1117,14 @@ export class Model {
         }
 
         const shader = subModel.passes[0].getShaderVariant(subModel.patches)!;
-        this._updateInstancedAttributes(shader.attributes, subModel.passes[0]);
-    }
-
-    protected _getInstancedAttributeIndex (name: string) {
-        const { attributes } = this.instancedAttributes;
-        for (let i = 0; i < attributes.length; i++) {
-            if (attributes[i].name === name) { return i; }
-        }
-        return -1;
-    }
-
-    private _setInstMatWorldIdx (idx: number) {
-        this._instMatWorldIdx = idx;
+        this._updateInstancedAttributes(shader.attributes, subModel);
     }
 
     // sub-classes can override the following functions if needed
 
-    // for now no submodel level instancing attributes
-    protected _updateInstancedAttributes (attributes: Attribute[], pass: Pass) {
-        if (!pass.device.hasFeature(Feature.INSTANCED_ARRAYS)) { return; }
-        // free old data
-
-        let size = 0;
-        for (let j = 0; j < attributes.length; j++) {
-            const attribute = attributes[j];
-            if (!attribute.isInstanced) { continue; }
-            size += FormatInfos[attribute.format].size;
-        }
-
-        const attrs = this.instancedAttributes;
-        attrs.buffer = new Uint8Array(size);
-        attrs.views.length = attrs.attributes.length = 0;
-        let offset = 0;
-        for (let j = 0; j < attributes.length; j++) {
-            const attribute = attributes[j];
-            if (!attribute.isInstanced) { continue; }
-            const attr = new Attribute();
-            attr.format = attribute.format;
-            attr.name = attribute.name;
-            attr.isNormalized = attribute.isNormalized;
-            attr.location = attribute.location;
-            attrs.attributes.push(attr);
-
-            const info = FormatInfos[attribute.format];
-
-            const typeViewArray = new (getTypedArrayConstructor(info))(attrs.buffer.buffer, offset, info.count);
-            attrs.views.push(typeViewArray);
-            offset += info.size;
-        }
-        if (pass.batchingScheme === BatchingSchemes.INSTANCING) { pass.getInstancedBuffer().destroy(); } // instancing IA changed
-        this._setInstMatWorldIdx(this._getInstancedAttributeIndex(INST_MAT_WORLD));
+    // for now no subModel level instancing attributes
+    protected _updateInstancedAttributes (attributes: Attribute[], subModel: SubModel) {
+        subModel.UpdateInstancedAttributes(attributes);
         this._localDataUpdated = true;
     }
 
@@ -808,6 +1135,25 @@ export class Model {
                 MemoryUsageBit.DEVICE,
                 UBOLocal.SIZE,
                 UBOLocal.SIZE,
+            ));
+        }
+    }
+
+    protected _initLocalSHDescriptors (subModelIndex: number) {
+        if (!EDITOR && !this._useLightProbe) {
+            return;
+        }
+
+        if (!this._localSHData) {
+            this._localSHData = new Float32Array(UBOSH.COUNT);
+        }
+
+        if (!this._localSHBuffer) {
+            this._localSHBuffer = this._device.createBuffer(new BufferInfo(
+                BufferUsageBit.UNIFORM | BufferUsageBit.TRANSFER_DST,
+                MemoryUsageBit.DEVICE,
+                UBOSH.SIZE,
+                UBOSH.SIZE,
             ));
         }
     }
@@ -825,6 +1171,10 @@ export class Model {
 
     protected _updateLocalDescriptors (subModelIndex: number, descriptorSet: DescriptorSet) {
         if (this._localBuffer) descriptorSet.bindBuffer(UBOLocal.BINDING, this._localBuffer);
+    }
+
+    protected _updateLocalSHDescriptors (subModelIndex: number, descriptorSet: DescriptorSet) {
+        if (this._localSHBuffer) descriptorSet.bindBuffer(UBOSH.BINDING, this._localSHBuffer);
     }
 
     protected _updateWorldBoundDescriptors (subModelIndex: number, descriptorSet: DescriptorSet) {

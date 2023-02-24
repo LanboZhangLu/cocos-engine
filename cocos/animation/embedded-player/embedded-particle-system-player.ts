@@ -1,8 +1,31 @@
+/*
+ Copyright (c) 2022-2023 Xiamen Yaji Software Co., Ltd.
+
+ https://www.cocos.com/
+
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
+
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
+
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ THE SOFTWARE.
+*/
+
 import { ccclass, serializable } from 'cc.decorator';
 import type { ParticleSystem } from '../../particle';
-import { warn } from '../../core/platform/debug';
-import type { Node } from '../../core/scene-graph/node';
-import { getClassByName } from '../../core/utils/js-typed';
+import { warn, js } from '../../core';
+import type { Node } from '../../scene-graph/node';
 import { CLASS_NAME_PREFIX_ANIM } from '../define';
 import { EmbeddedPlayableState, EmbeddedPlayable } from './embedded-player';
 
@@ -30,7 +53,7 @@ export class EmbeddedParticleSystemPlayable extends EmbeddedPlayable {
             return null;
         }
         // TODO: we shouldn't wanna know the name of `ParticleSystem` indeed.
-        const ParticleSystemConstructor = getClassByName(`cc.ParticleSystem`) as Constructor<ParticleSystem> | undefined;
+        const ParticleSystemConstructor = js.getClassByName(`cc.ParticleSystem`) as Constructor<ParticleSystem> | undefined;
         if (!ParticleSystemConstructor) {
             warn(`Particle system is required for embedded particle system player.`);
             return null;

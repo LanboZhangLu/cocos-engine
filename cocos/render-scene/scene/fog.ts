@@ -1,18 +1,17 @@
 /*
- Copyright (c) 2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2020-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -21,13 +20,11 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- */
+*/
 
-import { Enum } from '../../core/value-types';
-import { Color, Vec4 } from '../../core/math';
-import { legacyCC } from '../../core/global-exports';
-import { FogInfo } from '../../core/scene-graph/scene-globals';
-import { SRGBToLinear } from '../../core/pipeline/pipeline-funcs';
+import { Enum, Color, Vec4, cclegacy } from '../../core';
+import { FogInfo } from '../../scene-graph/scene-globals';
+import { SRGBToLinear } from '../../rendering/pipeline-funcs';
 
 const _v4 = new Vec4();
 
@@ -252,7 +249,7 @@ export class Fog {
     }
 
     protected _updatePipeline () {
-        const root = legacyCC.director.root;
+        const root = cclegacy.director.root;
         const value = this.enabled ? this.type : FOG_TYPE_NONE;
         const accurateValue = this.accurate ? 1 : 0;
         const pipeline = root.pipeline;
@@ -267,4 +264,4 @@ export class Fog {
     }
 }
 
-legacyCC.Fog = Fog;
+cclegacy.Fog = Fog;

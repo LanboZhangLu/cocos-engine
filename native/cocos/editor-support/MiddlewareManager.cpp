@@ -1,18 +1,17 @@
 /****************************************************************************
- Copyright (c) 2020-2021 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2020-2023 Xiamen Yaji Software Co., Ltd.
 
  http://www.cocos.com
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -25,7 +24,9 @@
 
 #include "MiddlewareManager.h"
 #include <algorithm>
+#include "2d/renderer/Batcher2d.h"
 #include "SeApi.h"
+#include "core/Root.h"
 
 MIDDLEWARE_BEGIN
 
@@ -67,49 +68,26 @@ void MiddlewareManager::clearRemoveList() {
 void MiddlewareManager::update(float dt) {
     isUpdating = true;
 
-    _renderInfo.reset();
-    auto *renderBuffer = _renderInfo.getBuffer();
-    if (renderBuffer) {
-        renderBuffer->writeUint32(0);
-    }
-
     _attachInfo.reset();
     auto *attachBuffer = _attachInfo.getBuffer();
     if (attachBuffer) {
         attachBuffer->writeUint32(0);
     }
 
-    auto isOrderDirty = false;
-    uint32_t maxRenderOrder = 0;
     for (auto *editor : _updateList) {
-        uint32_t renderOrder = maxRenderOrder;
         if (!_removeList.empty()) {
             auto removeIt = std::find(_removeList.begin(), _removeList.end(), editor);
             if (removeIt == _removeList.end()) {
                 editor->update(dt);
-                renderOrder = editor->getRenderOrder();
             }
         } else {
             editor->update(dt);
-            renderOrder = editor->getRenderOrder();
-        }
-
-        if (maxRenderOrder > renderOrder) {
-            isOrderDirty = true;
-        } else {
-            maxRenderOrder = renderOrder;
         }
     }
 
     isUpdating = false;
 
     clearRemoveList();
-
-    if (isOrderDirty) {
-        std::sort(_updateList.begin(), _updateList.end(), [](IMiddleware *it1, IMiddleware *it2) {
-            return it1->getRenderOrder() < it2->getRenderOrder();
-        });
-    }
 }
 
 void MiddlewareManager::render(float dt) {
@@ -141,6 +119,18 @@ void MiddlewareManager::render(float dt) {
             buffer->uploadIB();
             buffer->uploadVB();
         }
+
+        uint16_t accID = 65534;
+        auto *batch2d = Root::getInstance()->getBatcher2D();
+        if (it.first == VF_XYZUVCC) {
+            accID = 65535;
+        }
+        ccstd::vector<UIMeshBuffer *> uiMeshArray;
+        auto &uiBufArray = buffer->uiMeshBuffers();
+        for (auto &item : uiBufArray) {
+            uiMeshArray.push_back((UIMeshBuffer *)item);
+        }
+        batch2d->syncMeshBuffersToNative(accID, std::move(uiMeshArray));
     }
 
     clearRemoveList();

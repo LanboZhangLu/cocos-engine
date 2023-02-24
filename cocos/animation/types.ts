@@ -1,18 +1,17 @@
 /*
- Copyright (c) 2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2020-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -21,19 +20,9 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- */
+*/
 
-import { ccenum } from '../core/value-types/enum';
-
-export enum WrapModeMask {
-    Default = 0,
-    Normal = 1 << 0,
-    Loop = 1 << 1,
-    ShouldWrap = 1 << 2,
-    Clamp = 1 << 3,
-    PingPong = 1 << 4 | 1 << 1 | 1 << 2,  // Loop, ShouldWrap
-    Reverse = 1 << 5 | 1 << 2,      // ShouldWrap
-}
+import { ccenum, geometry } from '../core';
 
 /**
  * 动画使用的循环模式。
@@ -42,37 +31,37 @@ export enum WrapMode {
     /**
      * 向 Animation Component 或者 AnimationClip 查找 wrapMode
      */
-    Default = WrapModeMask.Default,
+    Default = geometry.WrapModeMask.Default,
 
     /**
      * 动画只播放一遍
      */
-    Normal = WrapModeMask.Normal,
+    Normal = geometry.WrapModeMask.Normal,
 
     /**
      * 从最后一帧或结束位置开始反向播放，到第一帧或开始位置停止
      */
-    Reverse = WrapModeMask.Reverse,
+    Reverse = geometry.WrapModeMask.Reverse,
 
     /**
      * 循环播放
      */
-    Loop = WrapModeMask.Loop,
+    Loop = geometry.WrapModeMask.Loop,
 
     /**
      * 反向循环播放
      */
-    LoopReverse = WrapModeMask.Loop | WrapModeMask.Reverse,
+    LoopReverse = geometry.WrapModeMask.Loop | geometry.WrapModeMask.Reverse,
 
     /**
      * 从第一帧播放到最后一帧，然后反向播放回第一帧，到第一帧后再正向播放，如此循环
      */
-    PingPong = WrapModeMask.PingPong,
+    PingPong = geometry.WrapModeMask.PingPong,
 
     /**
      * 从最后一帧开始反向播放，其他同 PingPong
      */
-    PingPongReverse = WrapModeMask.PingPong | WrapModeMask.Reverse,
+    PingPongReverse = geometry.WrapModeMask.PingPong | geometry.WrapModeMask.Reverse,
 }
 
 ccenum(WrapMode);

@@ -1,18 +1,17 @@
 /****************************************************************************
- Copyright (c) 2020-2021 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2020-2023 Xiamen Yaji Software Co., Ltd.
 
  http://www.cocos.com
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -35,7 +34,11 @@ namespace gfx {
 
 using namespace emscripten;
 
-CCWGPUQueue::CCWGPUQueue() : wrapper<Queue>(val::object()) {
+CCWGPUQueue::CCWGPUQueue() : Queue() {
+}
+
+CCWGPUQueue::~CCWGPUQueue() {
+    doDestroy();
 }
 
 void CCWGPUQueue::doInit(const QueueInfo &info) {
@@ -50,8 +53,19 @@ void CCWGPUQueue::doDestroy() {
             wgpuQueueRelease(_gpuQueueObject->wgpuQueue);
         }
         delete _gpuQueueObject;
+        _gpuQueueObject = nullptr;
     }
 }
+
+namespace {
+
+void wgpuQueueSubmitCallback(WGPUQueueWorkDoneStatus status, void *userdata) {
+    auto *recycleBin = static_cast<CCWGPURecycleBin *>(userdata);
+    recycleBin->bufferBin.purge();
+    recycleBin->textureBin.purge();
+    recycleBin->queryBin.purge();
+}
+} // namespace
 
 void CCWGPUQueue::submit(CommandBuffer *const *cmdBuffs, uint32_t count) {
     // ccstd::vector<WGPUCommandBuffer> commandBuffs(count);
@@ -64,6 +78,24 @@ void CCWGPUQueue::submit(CommandBuffer *const *cmdBuffs, uint32_t count) {
     //     auto* commandBuff = static_cast<CCWGPUCommandBuffer*>(cmdBuffs[i]);
     //     wgpuCommandBufferRelease(commandBuff->gpuCommandBufferObject()->wgpuCommandBuffer);
     // }
+
+    // CCWGPUDevice::getInstance()->stagingBuffer()->unmap();
+
+    ccstd::vector<WGPUCommandBuffer> wgpuCmdBuffs(count);
+    for (size_t i = 0; i < count; ++i) {
+        const auto *cmdBuff = static_cast<CCWGPUCommandBuffer *>(cmdBuffs[i]);
+        wgpuCmdBuffs[i] = cmdBuff->gpuCommandBufferObject()->wgpuCommandBuffer;
+
+        _numDrawCalls += cmdBuff->getNumDrawCalls();
+        _numInstances += cmdBuff->getNumInstances();
+        _numTriangles += cmdBuff->getNumTris();
+    }
+
+    wgpuQueueSubmit(_gpuQueueObject->wgpuQueue, count, wgpuCmdBuffs.data());
+    std::for_each(wgpuCmdBuffs.begin(), wgpuCmdBuffs.end(), [](auto wgpuCmdBuffer) { wgpuCommandBufferRelease(wgpuCmdBuffer); });
+
+    auto *recycleBin = CCWGPUDevice::getInstance()->recycleBin();
+    wgpuQueueOnSubmittedWorkDone(_gpuQueueObject->wgpuQueue, 0, wgpuQueueSubmitCallback, recycleBin);
 }
 
 } // namespace gfx

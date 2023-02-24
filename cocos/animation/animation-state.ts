@@ -1,18 +1,17 @@
 /*
- Copyright (c) 2017-2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2017-2023 Xiamen Yaji Software Co., Ltd.
 
  http://www.cocos.com
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
-  worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
-  not use Cocos Creator software for developing other software or tools that's
-  used for developing games. You are not granted to publish, distribute,
-  sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -24,14 +23,11 @@
 */
 
 import { EDITOR } from 'internal:constants';
-import { Node } from '../core/scene-graph/node';
+import { Node } from '../scene-graph/node';
 import { AnimationClip } from './animation-clip';
 import { Playable } from './playable';
-import { WrapMode, WrapModeMask, WrappedInfo } from './types';
-import { legacyCC } from '../core/global-exports';
-import { ccenum } from '../core/value-types/enum';
-import { assertIsTrue } from '../core/data/utils/asserts';
-import { debug } from '../core/platform/debug';
+import { WrapMode, WrappedInfo } from './types';
+import { cclegacy, debug, geometry, ccenum, assertIsTrue } from '../core';
 import { AnimationMask } from './marionette/animation-mask';
 import { PoseOutput } from './pose-output';
 import { BlendStateBuffer } from '../3d/skeletal-animation/skeletal-animation-blending';
@@ -126,7 +122,7 @@ export class AnimationState extends Playable {
         // dynamic change wrapMode will need reset time to 0
         this.time = 0;
 
-        if (value & WrapModeMask.Loop) {
+        if (value & geometry.WrapModeMask.Loop) {
             this.repeatCount = Infinity;
         } else {
             this.repeatCount = 1;
@@ -155,8 +151,8 @@ export class AnimationState extends Playable {
     set repeatCount (value: number) {
         this._repeatCount = value;
 
-        const shouldWrap = this._wrapMode & WrapModeMask.ShouldWrap;
-        const reverse = (this.wrapMode & WrapModeMask.Reverse) === WrapModeMask.Reverse;
+        const shouldWrap = this._wrapMode & geometry.WrapModeMask.ShouldWrap;
+        const reverse = (this.wrapMode & geometry.WrapModeMask.Reverse) === geometry.WrapModeMask.Reverse;
         if (value === Infinity && !shouldWrap && !reverse) {
             this._useSimpleProcess = true;
         } else {
@@ -193,18 +189,21 @@ export class AnimationState extends Playable {
      * The `min` and `max` field of the range are measured in seconds.
      * While setting, the range object should be a valid range.
      * The actual playback range would be the inclusion of this field and [0, duration].
+     * Set this field would reset the accumulated play time.
+     * If `min === max`, the animation always play at `min`.
      * @zh
      * 获取或设置播放范围。
      * 范围的 `min`、`max` 字段都是以秒为单位的。
      * 设置时，应当指定一个有效的范围；实际的播放范围是该字段和 [0, 周期] 之间的交集。
      * 设置播放范围时将重置累计播放时间。
+     * 如果 `min === max`，该动画将一直在 `min` 处播放。
      */
     get playbackRange (): Readonly<{ min: number; max: number; }> {
         return this._playbackRange;
     }
 
     set playbackRange (value) {
-        assertIsTrue(value.max > value.min);
+        assertIsTrue(value.max >= value.min);
         this._playbackRange.min = Math.max(value.min, 0);
         this._playbackRange.max = Math.min(value.max, this.duration);
         this._playbackDuration = this._playbackRange.max - this._playbackRange.min;
@@ -362,7 +361,7 @@ export class AnimationState extends Playable {
         this._playbackRange.max = clip.duration;
         this._playbackDuration = clip.duration;
 
-        if ((this.wrapMode & WrapModeMask.Loop) === WrapModeMask.Loop) {
+        if ((this.wrapMode & geometry.WrapModeMask.Loop) === geometry.WrapModeMask.Loop) {
             this.repeatCount = Infinity;
         } else {
             this.repeatCount = 1;
@@ -380,7 +379,7 @@ export class AnimationState extends Playable {
             });
         }
 
-        if (!(EDITOR && !legacyCC.GAME_VIEW)) {
+        if (!(EDITOR && !cclegacy.GAME_VIEW)) {
             if (clip.containsAnyEvent()) {
                 this._clipEventEval = clip.createEventEvaluator(this._targetNode);
             }
@@ -474,7 +473,7 @@ export class AnimationState extends Playable {
         this._currentFramePlayed = false;
         this.time = time || 0.0;
 
-        if (!EDITOR || legacyCC.GAME_VIEW) {
+        if (!EDITOR || cclegacy.GAME_VIEW) {
             const info = this.getWrappedInfo(time, this._wrappedInfo);
             this._clipEventEval?.ignore(info.ratio, info.direction);
         }
@@ -506,7 +505,7 @@ export class AnimationState extends Playable {
     public sample () {
         const info = this.getWrappedInfo(this.time, this._wrappedInfo);
         this._sampleCurves(info.time);
-        if (!EDITOR || legacyCC.GAME_VIEW) {
+        if (!EDITOR || cclegacy.GAME_VIEW) {
             this._sampleEvents(info);
         }
         this._sampleEmbeddedPlayers(info);
@@ -605,7 +604,7 @@ export class AnimationState extends Playable {
 
         if (this._clipEventEval || this._clipEmbeddedPlayerEval) {
             const wrapInfo = this.getWrappedInfo(this.time, this._wrappedInfo);
-            if (!EDITOR || legacyCC.GAME_VIEW) {
+            if (!EDITOR || cclegacy.GAME_VIEW) {
                 this._sampleEvents(wrapInfo);
             }
 
@@ -629,7 +628,7 @@ export class AnimationState extends Playable {
         const wrapMode = this.wrapMode;
         let needReverse = false;
 
-        if ((wrapMode & WrapModeMask.PingPong) === WrapModeMask.PingPong) {
+        if ((wrapMode & geometry.WrapModeMask.PingPong) === geometry.WrapModeMask.PingPong) {
             const isEnd = currentIterations - (currentIterations | 0) === 0;
             if (isEnd && (currentIterations > 0)) {
                 currentIterations -= 1;
@@ -640,7 +639,7 @@ export class AnimationState extends Playable {
                 needReverse = !needReverse;
             }
         }
-        if ((wrapMode & WrapModeMask.Reverse) === WrapModeMask.Reverse) {
+        if ((wrapMode & geometry.WrapModeMask.Reverse) === geometry.WrapModeMask.Reverse) {
             needReverse = !needReverse;
         }
         return needReverse;
@@ -692,7 +691,7 @@ export class AnimationState extends Playable {
         }
 
         let needReverse = false;
-        const shouldWrap = this._wrapMode & WrapModeMask.ShouldWrap;
+        const shouldWrap = this._wrapMode & geometry.WrapModeMask.ShouldWrap;
         if (shouldWrap) {
             needReverse = this._needReverse(currentIterations);
         }
@@ -750,4 +749,4 @@ export class AnimationState extends Playable {
     }
 }
 
-legacyCC.AnimationState = AnimationState;
+cclegacy.AnimationState = AnimationState;

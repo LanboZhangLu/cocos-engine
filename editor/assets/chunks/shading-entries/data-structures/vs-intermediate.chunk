@@ -13,7 +13,7 @@ struct SurfacesStandardVertexIntermediate
 #endif
 
   vec2 texCoord;
-#if CC_SURFACES_USE_SECOND_UV && !CC_USE_LIGHTMAP
+#if CC_SURFACES_USE_SECOND_UV
   vec2 texCoord1;
 #endif
 
@@ -26,15 +26,15 @@ struct SurfacesStandardVertexIntermediate
   #endif
 
   //transfered
-#if CC_RECEIVE_SHADOW
-  vec2 shadowBias;
+#if CC_RECEIVE_SHADOW || CC_USE_REFLECTION_PROBE
+  vec4 shadowBiasAndProbeId;
 #endif
 
 #if CC_USE_FOG != CC_FOG_NONE && !CC_USE_ACCURATE_FOG
   float fogFactor;
 #endif
 
-#if CC_USE_LIGHTMAP && !USE_BATCHING && !CC_FORWARD_ADD
+#if CC_USE_LIGHTMAP && !CC_FORWARD_ADD
   vec3 lightmapUV;
 #endif
 };

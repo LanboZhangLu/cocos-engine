@@ -1,35 +1,61 @@
+/*
+ Copyright (c) 2022-2023 Xiamen Yaji Software Co., Ltd.
+
+ https://www.cocos.com/
+
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
+
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
+
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ THE SOFTWARE.
+*/
+
 import { DEBUG } from 'internal:constants';
 import {
     AnimationGraph, Layer, StateMachine, State, isAnimationTransition,
     SubStateMachine, EmptyState, EmptyStateTransition, TransitionInterruptionSource,
 } from './animation-graph';
-import { assertIsTrue, assertIsNonNullable } from '../../core/data/utils/asserts';
-import { MotionEval, MotionEvalContext } from './motion';
-import type { Node } from '../../core/scene-graph/node';
+import { MotionEval, MotionEvalContext, MotionPort } from './motion';
+import type { Node } from '../../scene-graph/node';
 import { createEval } from './create-eval';
 import { Value, VarInstance, TriggerResetMode } from './variable';
 import { BindContext, validateVariableExistence, validateVariableType, VariableType } from './parametric';
 import { ConditionEval, TriggerCondition } from './condition';
 import { MotionState } from './motion-state';
 import { AnimationMask } from './animation-mask';
-import { warnID } from '../../core/platform/debug';
-import { BlendStateBuffer, LayeredBlendStateBuffer } from '../../3d/skeletal-animation/skeletal-animation-blending';
+import { warnID, assertIsTrue, assertIsNonNullable } from '../../core';
 import { MAX_ANIMATION_LAYER } from '../../3d/skeletal-animation/limits';
-import { clearWeightsStats, getWeightsStats, graphDebug, graphDebugGroup, graphDebugGroupEnd, GRAPH_DEBUG_ENABLED } from './graph-debug';
 import { AnimationClip } from '../animation-clip';
 import type { AnimationController } from './animation-controller';
 import { StateMachineComponent } from './state-machine-component';
 import { InteractiveState } from './state';
+import {
+    AnimationGraphBindingContext, AnimationGraphEvaluationContext,
+    AnimationGraphLayerWideBindingContext, AnimationGraphPoseLayoutMaintainer, defaultTransformsTag, LayoutChangeFlag, MetaValueRegistry,
+} from './animation-graph-context';
+import { TransformArray } from '../core/transform-array';
+import { applyDeltaPose, blendPoseInto, Pose, TransformFilter } from '../core/pose';
 
 export class AnimationGraphEval {
     private declare _layerEvaluations: LayerEval[];
-    private _blendBuffer = new LayeredBlendStateBuffer();
     private _currentTransitionCache: TransitionStatus = {
         duration: 0.0,
         time: 0.0,
     };
 
-    constructor (graph: AnimationGraph, root: Node, controller: AnimationController) {
+    constructor (graph: AnimationGraph, root: Node, controller: AnimationController, clipOverrides: ReadonlyClipOverrideMap | null) {
         if (DEBUG) {
             if (graph.layers.length >= MAX_ANIMATION_LAYER) {
                 throw new Error(
@@ -50,50 +76,62 @@ export class AnimationGraphEval {
             }
         }
 
-        const context: LayerContext = {
-            controller,
-            blendBuffer: this._blendBuffer,
-            node: root,
-            getVar: (id: string): VarInstance | undefined => this._varInstances[id],
-            triggerResetFn: (name: string) => {
-                this.setValue(name, false);
-            },
+        const triggerResetFn = (name: string) => {
+            this.setValue(name, false);
         };
 
-        const layerEvaluations = this._layerEvaluations = graph.layers.map((layer) => {
-            const layerEval = new LayerEval(layer, {
-                ...context,
-                mask: layer.mask ?? undefined,
-            });
+        const poseLayoutMaintainer = new AnimationGraphPoseLayoutMaintainer(this._metaValueRegistry);
+        this._poseLayoutMaintainer = poseLayoutMaintainer;
+
+        const bindingContext = new AnimationGraphBindingContext(root, poseLayoutMaintainer, this._varInstances);
+        this._bindingContext = bindingContext;
+
+        poseLayoutMaintainer.startBind();
+
+        this._layerEvaluations = graph.layers.map((layer) => {
+            const layerEval = new LayerEval(
+                layer,
+                bindingContext,
+                clipOverrides,
+                controller,
+                triggerResetFn,
+            );
             return layerEval;
         });
 
-        // Set layer masks.
-        const nLayers = layerEvaluations.length;
-        for (let iLayer = 0; iLayer < nLayers; ++iLayer) {
-            const mask = graph.layers[iLayer].mask;
-            if (mask) {
-                const excludeNodes = mask.filterDisabledNodes(context.node);
-                this._blendBuffer.setMask(iLayer, excludeNodes);
-            }
-        }
+        this._root = root;
+        this._initializeContexts();
+    }
+
+    public destroy () {
+        this._evaluationContext.destroy();
+    }
+
+    public get layerCount () {
+        return this._layerEvaluations.length;
     }
 
     public update (deltaTime: number) {
         const {
-            _blendBuffer: blendBuffer,
             _layerEvaluations: layerEvaluations,
+            _evaluationContext: evaluationContext,
+            _poseLayoutMaintainer: poseLayoutMaintainer,
         } = this;
-        graphDebugGroup(`New frame started.`);
-        if (GRAPH_DEBUG_ENABLED) {
-            clearWeightsStats();
-        }
+
+        const finalPose = evaluationContext.pushDefaultedPose();
         const nLayers = layerEvaluations.length;
         for (let iLayer = 0; iLayer < nLayers; ++iLayer) {
             const layerEval = layerEvaluations[iLayer];
-            layerEval.update(deltaTime);
-            blendBuffer.commitLayerChanges(iLayer, layerEval.weight * layerEval.passthroughWeight);
+            const layerPose = layerEval.update(deltaTime, evaluationContext);
+            const layerActualWeight = layerEval.weight * layerEval.passthroughWeight;
+            if (layerEval.additive) {
+                applyDeltaPose(finalPose, layerPose, layerActualWeight, layerEval.transformFilter);
+            } else {
+                blendPoseInto(finalPose, layerPose, layerActualWeight, layerEval.transformFilter);
+            }
+            evaluationContext.popPose();
         }
+
         if (this._hasAutoTrigger) {
             const { _varInstances: varInstances } = this;
             for (const varName in varInstances) {
@@ -104,11 +142,13 @@ export class AnimationGraphEval {
                 }
             }
         }
-        if (GRAPH_DEBUG_ENABLED) {
-            graphDebug(`Weights: ${getWeightsStats()}`);
+
+        poseLayoutMaintainer.apply(finalPose);
+        evaluationContext.popPose();
+
+        if (DEBUG) {
+            assertIsTrue(evaluationContext.allocatedPoseCount === 0, `Pose leaked.`);
         }
-        this._blendBuffer.apply();
-        graphDebugGroupEnd();
     }
 
     public getVariables (): Iterable<Readonly<[string, Readonly<{ type: VariableType }>]>> {
@@ -137,7 +177,6 @@ export class AnimationGraphEval {
     }
 
     public getNextClipStatuses (layer: number): Iterable<Readonly<ClipStatus>> {
-        assertIsNonNullable(this.getCurrentTransition(layer), '!!this.getCurrentTransition(layer)');
         return this._layerEvaluations[layer].getNextClipStatuses();
     }
 
@@ -159,16 +198,142 @@ export class AnimationGraphEval {
     }
 
     public getLayerWeight (layerIndex: number) {
+        assertIsTrue(layerIndex >= 0 && layerIndex < this._layerEvaluations.length, `Invalid layer index`);
         return this._layerEvaluations[layerIndex].weight;
     }
 
     public setLayerWeight (layerIndex: number, weight: number) {
+        assertIsTrue(layerIndex >= 0 && layerIndex < this._layerEvaluations.length, `Invalid layer index`);
         this._layerEvaluations[layerIndex].weight = weight;
+    }
+
+    public overrideClips (overrides: ReadonlyClipOverrideMap) {
+        const {
+            _poseLayoutMaintainer: poseLayoutMaintainer,
+            _layerEvaluations: layerEvaluations,
+        } = this;
+
+        poseLayoutMaintainer.startBind();
+
+        const nLayers = layerEvaluations.length;
+        for (let iLayer = 0; iLayer < nLayers; ++iLayer) {
+            const layerEval = layerEvaluations[iLayer];
+            layerEval.overrideClips(overrides, this._bindingContext);
+        }
+
+        this._updateAfterPossiblePoseLayoutChange();
     }
 
     private _varInstances: Record<string, VarInstance> = {};
     private _hasAutoTrigger = false;
+    private _metaValueRegistry = new MetaValueRegistry();
+    private _poseLayoutMaintainer: AnimationGraphPoseLayoutMaintainer;
+    private _bindingContext: AnimationGraphBindingContext;
+    /**
+     * Preserved here for clip overriding.
+     */
+    private declare _root: Node;
+    private declare _evaluationContext: AnimationGraphEvaluationContext;
+
+    private _initializeContexts () {
+        const {
+            _poseLayoutMaintainer: poseLayoutMaintainer,
+        } = this;
+
+        // Ignore in initialization.
+        // eslint-disable-next-line no-void
+        void poseLayoutMaintainer.endBind();
+
+        this._createOrUpdateTransformFilters();
+
+        const evaluationContext = new AnimationGraphEvaluationContext({
+            transformCount: poseLayoutMaintainer.transformCount,
+            metaValueCount: poseLayoutMaintainer.metaValueCount,
+        });
+        this._evaluationContext = evaluationContext;
+
+        // Capture the default transforms.
+        poseLayoutMaintainer.fetchDefaultTransforms(evaluationContext[defaultTransformsTag]);
+    }
+
+    private _updateAfterPossiblePoseLayoutChange () {
+        const {
+            _poseLayoutMaintainer: poseLayoutMaintainer,
+        } = this;
+
+        const layoutChangeFlags = poseLayoutMaintainer.endBind();
+
+        // Nothing changed, this should be the commonest case in real world.
+        if (layoutChangeFlags === 0) {
+            return;
+        }
+
+        // No matter count or order changed, we should update the transform filters.
+        if ((layoutChangeFlags & LayoutChangeFlag.TRANSFORM_COUNT)
+            || (layoutChangeFlags & LayoutChangeFlag.TRANSFORM_ORDER)) {
+            this._createOrUpdateTransformFilters();
+        }
+
+        // Either transform count or meta value count changed, we should recreate the eval context.
+        let evaluationContextRecreated = false;
+        if ((layoutChangeFlags & LayoutChangeFlag.TRANSFORM_COUNT)
+        || (layoutChangeFlags & LayoutChangeFlag.META_VALUE_COUNT)) {
+            const evaluationContext = new AnimationGraphEvaluationContext({
+                transformCount: poseLayoutMaintainer.transformCount,
+                metaValueCount: poseLayoutMaintainer.metaValueCount,
+            });
+            this._evaluationContext.destroy();
+            this._evaluationContext = evaluationContext;
+            evaluationContextRecreated = true;
+        }
+
+        // If the eval context was recreated or the layout has changed, we should update the default transforms.
+        if (evaluationContextRecreated
+            || (layoutChangeFlags & LayoutChangeFlag.TRANSFORM_COUNT)
+            || (layoutChangeFlags & LayoutChangeFlag.TRANSFORM_ORDER)) {
+            poseLayoutMaintainer.fetchDefaultTransforms(this._evaluationContext[defaultTransformsTag]);
+        }
+    }
+
+    private _createOrUpdateTransformFilters () {
+        const {
+            _layerEvaluations: layerEvaluations,
+            _poseLayoutMaintainer: poseLayoutMaintainer,
+            _root: root,
+        } = this;
+
+        const nLayers = layerEvaluations.length;
+        for (let iLayer = 0; iLayer < nLayers; ++iLayer) {
+            const mask = layerEvaluations[iLayer].mask;
+            if (mask) {
+                const transformFilter = poseLayoutMaintainer.createTransformFilter(mask, root);
+                layerEvaluations[iLayer].transformFilter = transformFilter;
+            }
+        }
+    }
 }
+
+/**
+ * @zh
+ * 描述了如何对动画图中引用的动画剪辑进行替换。
+ * @en
+ * Describes how to override animation clips in an animation graph.
+ */
+export type ReadonlyClipOverrideMap = {
+    /**
+     * @zh
+     * 获取指定原始动画剪辑应替换成的动画剪辑。
+     * @en
+     * Gets the overriding animation clip of specified original animation clip.
+     *
+     * @param animationClip @zh 原始动画剪辑。@en Original animation clip.
+     *
+     * @returns @zh 替换的动画剪辑；如果原始动画剪辑不应被替换，则应该返回 `undefined`。 @en
+     * The overriding animation clip.
+     * If the original animation clip should not be overrode, `undefined` should be returned.
+     */
+    get(animationClip: AnimationClip): AnimationClip | undefined;
+};
 
 /**
  * @en
@@ -248,31 +413,6 @@ export interface MotionStateStatus {
 
 type TriggerResetFn = (name: string) => void;
 
-interface LayerContext extends BindContext {
-    controller: AnimationController;
-
-    /**
-     * The root node bind to the graph.
-     */
-    node: Node;
-
-    /**
-     * The blend buffer.
-     */
-    blendBuffer: BlendStateBuffer;
-
-    /**
-     * The mask applied to this layer.
-     */
-    mask?: AnimationMask;
-
-    /**
-     * TODO: A little hacky.
-     * A function which resets specified trigger. This function can be stored.
-     */
-    triggerResetFn: TriggerResetFn;
-}
-
 class LayerEval {
     public declare name: string;
 
@@ -280,17 +420,47 @@ class LayerEval {
 
     public passthroughWeight = 1.0;
 
-    constructor (layer: Layer, context: LayerContext) {
+    /** Used by top level eval. */
+    public transformFilter: TransformFilter | undefined = undefined;
+
+    /** Used by top level eval. */
+    public declare readonly additive: boolean;
+
+    /** Used by top level eval. */
+    public get mask () {
+        return this._mask;
+    }
+
+    constructor (
+        layer: Layer,
+        context: AnimationGraphBindingContext,
+        clipOverrides: ReadonlyClipOverrideMap | null,
+        controller: AnimationController,
+        triggerResetFn: TriggerResetFn,
+    ) {
+        const isAdditiveLayer = layer.additive;
+
         this.name = layer.name;
-        this._controller = context.controller;
+        this._controller = controller;
         this.weight = layer.weight;
-        const { entry, exit } = this._addStateMachine(layer.stateMachine, null, {
-            ...context,
-        }, layer.name);
+        this.additive = isAdditiveLayer;
+        const myContext: AnimationGraphLayerWideBindingContext = {
+            outerContext: context,
+            additive: isAdditiveLayer,
+        };
+        const { entry, exit } = this._addStateMachine(
+            layer.stateMachine,
+            null,
+            myContext,
+            clipOverrides,
+            layer.name,
+        );
         this._topLevelEntry = entry;
         this._topLevelExit = exit;
         this._currentNode = entry;
-        this._resetTrigger = context.triggerResetFn;
+        this._resetTrigger = triggerResetFn;
+
+        this._mask = layer.mask;
     }
 
     /**
@@ -300,13 +470,17 @@ class LayerEval {
         return this._currentNode === this._topLevelExit;
     }
 
-    public update (deltaTime: number) {
+    public update (deltaTime: number, context: AnimationGraphEvaluationContext): Pose {
         if (!this.exited) {
-            this._fromWeight = 1.0;
-            this._toWeight = 0.0;
+            this._transitionAlpha = 0.0;
             this._eval(deltaTime);
-            this._sample();
+            const sampled = this._sample(context);
+            if (sampled) {
+                return sampled;
+            }
+            // fallthrough
         }
+        return this._pushNullishPose(context);
     }
 
     public getCurrentStateStatus (): Readonly<MotionStateStatus> | null {
@@ -323,9 +497,9 @@ class LayerEval {
     public getCurrentClipStatuses (): Iterable<ClipStatus> {
         const { _currentNode: currentNode } = this;
         if (currentNode.kind === NodeKind.animation) {
-            return currentNode.getClipStatuses(this._fromWeight);
+            return currentNode.getClipStatuses(1.0 - this._transitionAlpha);
         } else if (currentNode.kind === NodeKind.transitionSnapshot) {
-            return currentNode.first.getClipStatuses(this._fromWeight);
+            return currentNode.first.getClipStatuses(1.0 - this._transitionAlpha);
         } else {
             return emptyClipStatusesIterable;
         }
@@ -335,7 +509,7 @@ class LayerEval {
         const { _currentTransitionPath: currentTransitionPath } = this;
         if (currentTransitionPath.length !== 0) {
             const lastNode = currentTransitionPath[currentTransitionPath.length - 1];
-            if (lastNode.to.kind !== NodeKind.animation) {
+            if (lastNode.to.kind !== NodeKind.animation && lastNode.to.kind !== NodeKind.empty) {
                 return false;
             }
             const {
@@ -358,24 +532,46 @@ class LayerEval {
     }
 
     public getNextStateStatus (): Readonly<MotionStateStatus> | null {
-        assertIsTrue(
-            this._currentTransitionToNode && this._currentTransitionToNode.kind !== NodeKind.empty,
-            'There is no transition currently in layer.',
-        );
+        if (!this._currentTransitionToNode
+            || this._currentTransitionToNode.kind === NodeKind.empty) {
+            return null;
+        }
         return this._currentTransitionToNode.getToPortStatus();
     }
 
     public getNextClipStatuses (): Iterable<ClipStatus> {
         const { _currentTransitionPath: currentTransitionPath } = this;
         const nCurrentTransitionPath = currentTransitionPath.length;
-        assertIsTrue(nCurrentTransitionPath > 0, 'There is no transition currently in layer.');
+        if (nCurrentTransitionPath === 0) {
+            return emptyClipStatusesIterable;
+        }
         const to = currentTransitionPath[nCurrentTransitionPath - 1].to;
-        assertIsTrue(to.kind === NodeKind.animation);
-        return to.getClipStatuses(this._toWeight) ?? emptyClipStatusesIterable;
+        if (to.kind !== NodeKind.animation) {
+            return emptyClipStatusesIterable;
+        }
+        return to.getClipStatuses(this._transitionAlpha) ?? emptyClipStatusesIterable;
+    }
+
+    public overrideClips (overrides: ReadonlyClipOverrideMap, context: AnimationGraphBindingContext) {
+        const { _motionStates: motionStates } = this;
+        const nMotionStates = motionStates.length;
+        const myContext: AnimationGraphLayerWideBindingContext = {
+            outerContext: context,
+            additive: this.additive,
+        };
+        for (let iMotionState = 0; iMotionState < nMotionStates; ++iMotionState) {
+            const node = motionStates[iMotionState];
+            if (node.kind === NodeKind.animation) {
+                node.overrideClips(overrides, myContext);
+            }
+        }
     }
 
     private declare _controller: AnimationController;
-    private _nodes: NodeEval[] = [];
+    /**
+     * Preserved here for clip overriding.
+     */
+    private _motionStates: MotionStateEval[] = [];
     private _topLevelEntry: NodeEval;
     private _topLevelExit: NodeEval;
     private _currentNode: NodeEval;
@@ -383,17 +579,24 @@ class LayerEval {
     private _currentTransitionPath: TransitionEval[] = [];
     private _transitionProgress = 0;
     private declare _triggerReset: TriggerResetFn;
-    private _fromWeight = 0.0;
-    private _toWeight = 0.0;
+    private _transitionAlpha = 0.0;
     private _fromUpdated = false;
     private _toUpdated = false;
     /**
      * A virtual state which represents the transition snapshot captured when a transition is interrupted.
      */
     private _transitionSnapshot = new TransitionSnapshotEval();
+    /**
+     * Preserved here for clip overriding.
+     */
+    private _mask: AnimationMask | null = null;
 
     private _addStateMachine (
-        graph: StateMachine, parentStateMachineInfo: StateMachineInfo | null, context: LayerContext, __DEBUG_ID__: string,
+        graph: StateMachine,
+        parentStateMachineInfo: StateMachineInfo | null,
+        context: AnimationGraphLayerWideBindingContext,
+        clipOverrides: ReadonlyClipOverrideMap | null,
+        __DEBUG_ID__: string,
     ): StateMachineInfo {
         const nodes = Array.from(graph.states());
 
@@ -403,7 +606,9 @@ class LayerEval {
 
         const nodeEvaluations = nodes.map((node): NodeEval | null => {
             if (node instanceof MotionState) {
-                return new MotionStateEval(node, context);
+                const motionStateEval = new MotionStateEval(node, context, clipOverrides);
+                this._motionStates.push(motionStateEval);
+                return motionStateEval;
             } else if (node === graph.entryState) {
                 return entryEval = new SpecialStateEval(node, NodeKind.entry, node.name);
             } else if (node === graph.exitState) {
@@ -439,7 +644,13 @@ class LayerEval {
 
         const subStateMachineInfos = nodes.map((node) => {
             if (node instanceof SubStateMachine) {
-                const subStateMachineInfo = this._addStateMachine(node.stateMachine, stateMachineInfo, context, `${__DEBUG_ID__}/${node.name}`);
+                const subStateMachineInfo = this._addStateMachine(
+                    node.stateMachine,
+                    stateMachineInfo,
+                    context,
+                    clipOverrides,
+                    `${__DEBUG_ID__}/${node.name}`,
+                );
                 subStateMachineInfo.components = new InstantiatedComponents(node);
                 return subStateMachineInfo;
             } else {
@@ -489,7 +700,7 @@ class LayerEval {
                     toNode = nodeEval;
                 }
 
-                const conditions = outgoing.conditions.map((condition) => condition[createEval](context));
+                const conditions = outgoing.conditions.map((condition) => condition[createEval](context.outerContext));
 
                 const transitionEval: TransitionEval = {
                     conditions,
@@ -502,6 +713,7 @@ class LayerEval {
                     exitCondition: 0.0,
                     exitConditionEnabled: false,
                     interruption: TransitionInterruptionSource.NONE,
+                    activated: false,
                 };
 
                 if (isAnimationTransition(outgoing)) {
@@ -541,7 +753,6 @@ class LayerEval {
      */
     private _eval (deltaTime: Readonly<number>) {
         assertIsTrue(!this.exited);
-        graphDebugGroup(`[Layer ${this.name}]: UpdateStart ${deltaTime}s`);
 
         const haltOnNonMotionState = this._continueDanglingTransition();
         if (haltOnNonMotionState) {
@@ -549,7 +760,6 @@ class LayerEval {
         }
 
         const MAX_ITERATIONS = 100;
-        let passConsumed = 0.0;
 
         let remainTimePiece = deltaTime;
         for (let continueNextIterationForce = true, // Force next iteration even remain time piece is zero
@@ -558,19 +768,9 @@ class LayerEval {
         ) {
             continueNextIterationForce = false;
 
-            if (iterations !== 0) {
-                graphDebug(`Pass end. Consumed ${passConsumed}s, remain: ${remainTimePiece}s`);
-            }
-
             if (iterations === MAX_ITERATIONS) {
                 warnID(14000, MAX_ITERATIONS);
                 break;
-            }
-
-            graphDebug(`Pass ${iterations} started.`);
-
-            if (GRAPH_DEBUG_ENABLED) {
-                passConsumed = 0.0;
             }
 
             ++iterations;
@@ -590,9 +790,6 @@ class LayerEval {
                 }
 
                 const currentUpdatingConsume = this._updateCurrentTransition(remainTimePiece);
-                if (GRAPH_DEBUG_ENABLED) {
-                    passConsumed = currentUpdatingConsume;
-                }
                 remainTimePiece -= currentUpdatingConsume;
                 if (this._currentNode.kind === NodeKind.exit) {
                     break;
@@ -615,10 +812,6 @@ class LayerEval {
                     requires: updateRequires,
                 } = transitionMatch;
 
-                graphDebug(`[SubStateMachine ${this.name}]: CurrentNodeUpdate: ${currentNode.name}`);
-                if (GRAPH_DEBUG_ENABLED) {
-                    passConsumed = updateRequires;
-                }
                 remainTimePiece -= updateRequires;
 
                 if (currentNode.kind === NodeKind.animation) {
@@ -633,7 +826,6 @@ class LayerEval {
 
                 continueNextIterationForce = true;
             } else { // If no transition matched, we update current node.
-                graphDebug(`[SubStateMachine ${this.name}]: CurrentNodeUpdate: ${currentNode.name}`);
                 if (currentNode.kind === NodeKind.animation) {
                     currentNode.updateFromPort(remainTimePiece);
                     this._fromUpdated = true;
@@ -645,15 +837,9 @@ class LayerEval {
                     // I'm sure conscious of it's redundant with above statement, just emphasize.
                     remainTimePiece = 0.0;
                 }
-                if (GRAPH_DEBUG_ENABLED) {
-                    passConsumed = remainTimePiece;
-                }
                 continue;
             }
         }
-
-        graphDebug(`[SubStateMachine ${this.name}]: UpdateEnd`);
-        graphDebugGroupEnd();
 
         if (this._fromUpdated && this._currentNode.kind === NodeKind.animation) {
             this._fromUpdated = false;
@@ -668,39 +854,59 @@ class LayerEval {
         return remainTimePiece;
     }
 
-    private _sample () {
+    private _sample (context: AnimationGraphEvaluationContext): Pose | null {
         const {
             _currentNode: currentNode,
             _currentTransitionToNode: currentTransitionToNode,
-            _fromWeight: fromWeight,
-            _toWeight: toWeight,
+            _transitionAlpha: transitionAlpha,
         } = this;
         if (currentNode.kind === NodeKind.empty) {
-            this.passthroughWeight = toWeight;
+            // If current state is empty:
+            // - if there is no transition, the passthrough weight is 0.0, means this layer has no effect.
+            // - otherwise,
+            //   - if the destination is also empty state, it's as if no transition.
+            //   - otherwise, asserts the destination to be motion state;
+            //     the passthrough weight is set to the transition rate,
+            //     the motion state is sampled with full weight.
+            this.passthroughWeight = 0.0;
             if (currentTransitionToNode && currentTransitionToNode.kind === NodeKind.animation) {
-                currentTransitionToNode.sampleToPort(1.0);
+                this.passthroughWeight = transitionAlpha;
+                return currentTransitionToNode.sampleToPort(context);
             }
         } else if (currentTransitionToNode && currentTransitionToNode.kind === NodeKind.empty) {
-            this.passthroughWeight = fromWeight;
-            this._sampleSource(1.0);
+            this.passthroughWeight = (1.0 - transitionAlpha);
+            return this._sampleSource(context);
         } else {
             this.passthroughWeight = 1.0;
-            this._sampleSource(fromWeight);
+            const sourcePose = this._sampleSource(context) ?? this._pushNullishPose(context);
             if (currentTransitionToNode && currentTransitionToNode.kind === NodeKind.animation) {
-                currentTransitionToNode.sampleToPort(toWeight);
+                const destPose = currentTransitionToNode.sampleToPort(context) ?? this._pushNullishPose(context);
+                blendPoseInto(sourcePose, destPose, transitionAlpha);
+                context.popPose();
+                return sourcePose;
+            } else {
+                return sourcePose;
             }
         }
+        return null;
     }
 
-    private _sampleSource (weight: number) {
+    private _sampleSource (context: AnimationGraphEvaluationContext): Pose | null {
         const {
             _currentNode: currentNode,
         } = this;
         if (currentNode.kind === NodeKind.animation) {
-            currentNode.sampleFromPort(weight);
+            return currentNode.sampleFromPort(context);
         } else if (currentNode.kind === NodeKind.transitionSnapshot) {
-            currentNode.sample(weight);
+            return currentNode.sample(context);
         }
+        return null;
+    }
+
+    private _pushNullishPose (context: AnimationGraphEvaluationContext) {
+        return this.additive
+            ? context.pushZeroDeltaPose()
+            : context.pushDefaultedPose();
     }
 
     /**
@@ -718,7 +924,6 @@ class LayerEval {
             currentNode,
             currentNode,
             deltaTime,
-            null,
             transitionMatch,
         );
         if (transitionMatch.hasZeroCost()) {
@@ -757,7 +962,6 @@ class LayerEval {
                 ancestor.any,
                 realNode,
                 deltaTime,
-                null,
                 result,
             );
             if (updated) {
@@ -777,7 +981,7 @@ class LayerEval {
      * @returns True if a transition match is updated into the `result`.
      */
     private _matchTransition (
-        node: NodeEval, realNode: NodeEval, deltaTime: Readonly<number>, except: TransitionEval | null, result: TransitionMatchCache,
+        node: NodeEval, realNode: NodeEval, deltaTime: Readonly<number>, result: TransitionMatchCache,
     ) {
         assertIsTrue(node === realNode || node.kind === NodeKind.any);
         const { outgoingTransitions } = node;
@@ -785,7 +989,7 @@ class LayerEval {
         let resultUpdated = false;
         for (let iTransition = 0; iTransition < nTransitions; ++iTransition) {
             const transition = outgoingTransitions[iTransition];
-            if (transition === except) {
+            if (transition.activated) {
                 continue;
             }
 
@@ -849,10 +1053,7 @@ class LayerEval {
      * @returns If the transition finally ran into entry/exit state.
      */
     private _switchTo (transition: TransitionEval) {
-        const { _currentTransitionPath: currentTransitionPath } = this;
-
         this._consumeTransition(transition);
-        currentTransitionPath.push(transition);
 
         const motionNode = this._matchTransitionPathUntilMotion();
         if (motionNode) {
@@ -912,7 +1113,6 @@ class LayerEval {
                 tailNode,
                 tailNode,
                 0.0,
-                null,
                 transitionMatch,
             );
             if (!transitionMatch.transition) {
@@ -920,7 +1120,6 @@ class LayerEval {
             }
             const transition = transitionMatch.transition;
             this._consumeTransition(transition);
-            currentTransitionPath.push(transition);
             tailNode = transition.to;
         }
 
@@ -934,6 +1133,9 @@ class LayerEval {
             // We're entering a state machine
             this._callEnterMethods(to);
         }
+
+        transition.activated = true;
+        this._currentTransitionPath.push(transition);
     }
 
     private _resetTriggersAlongThePath () {
@@ -1023,31 +1225,23 @@ class LayerEval {
 
         const toNodeName = toNode?.name ?? '<Empty>';
 
-        this._fromWeight = (1.0 - ratio);
-        this._toWeight = ratio;
+        this._transitionAlpha = ratio;
 
         const shouldUpdatePorts = contrib !== 0;
         const hasFinished = ratio === 1.0;
 
         if (fromNode.kind === NodeKind.animation && shouldUpdatePorts) {
-            graphDebugGroup(`Update ${fromNode.name}`);
             fromNode.updateFromPort(contrib);
             this._fromUpdated = true;
-            graphDebugGroupEnd();
         }
 
         if (toNode.kind === NodeKind.animation && shouldUpdatePorts) {
-            graphDebugGroup(`Update ${toNode.name}`);
             toNode.updateToPort(contrib);
             this._toUpdated = true;
-            graphDebugGroupEnd();
         }
-
-        graphDebugGroupEnd();
 
         if (hasFinished) {
             // Transition done.
-            graphDebug(`[SubStateMachine ${this.name}]: Transition finished:  ${fromNode.name} -> ${toNodeName}.`);
             this._finishCurrentTransition();
         }
 
@@ -1080,26 +1274,32 @@ class LayerEval {
         }
         this._fromUpdated = this._toUpdated;
         this._toUpdated = false;
-        this._dropCurrentTransition();
+        this._dropCurrentTransition(true);
         this._currentNode = toNode;
         if (fromNode.kind === NodeKind.transitionSnapshot) {
             fromNode.clear();
         }
     }
 
-    private _dropCurrentTransition () {
+    private _dropCurrentTransition (inactivate: boolean) {
         const {
+            _currentTransitionPath: currentTransitionPath,
             _currentTransitionToNode: currentTransitionToNode,
         } = this;
         assertIsNonNullable(currentTransitionToNode);
         if (currentTransitionToNode.kind === NodeKind.animation) {
             currentTransitionToNode.finishTransition();
         }
+        if (inactivate) {
+            const nTransitions = currentTransitionPath.length;
+            for (let iTransition = 0; iTransition < nTransitions; ++iTransition) {
+                currentTransitionPath[iTransition].activated = false;
+            }
+        }
         this._currentTransitionToNode = null;
-        this._currentTransitionPath.length = 0;
+        currentTransitionPath.length = 0;
         // Make sure we won't suffer from precision problem
-        this._fromWeight = 1.0;
-        this._toWeight = 0.0;
+        this._transitionAlpha = 0.0;
     }
 
     private _detectInterruption (remainTimePiece: number, result: InterruptingTransitionMatchCache): InterruptingTransitionMatch | null {
@@ -1154,7 +1354,6 @@ class LayerEval {
             motion0,
             motion0,
             remainTimePiece,
-            currentTransition,
             transitionMatch,
         );
         if (transitionMatchUpdated) {
@@ -1172,7 +1371,6 @@ class LayerEval {
                 motion1,
                 motion1,
                 remainTimePiece,
-                currentTransition,
                 transitionMatch,
             );
             if (transitionMatchUpdated) {
@@ -1218,7 +1416,10 @@ class LayerEval {
             transitionSnapshot.enqueue(currentNode, 1.0);
         }
         this._takeCurrentTransitionSnapshot(transitionSource);
-        this._dropCurrentTransition();
+        // Drop transitions.
+        // Do not inactivate the transitions since in snapshot mode, transitions are treated as inactivated.
+        // They will be inactivated when the snapshot is cleared.
+        this._dropCurrentTransition(false);
         // Install the snapshot as "current"
         this._currentNode = this._transitionSnapshot;
         const ranIntoNonMotionState = this._switchTo(transition);
@@ -1260,6 +1461,7 @@ class LayerEval {
         }
 
         transitionSnapshot.enqueue(currentTransitionToNode, ratio);
+        transitionSnapshot.transferTransitions(currentTransitionPath);
     }
 
     private _resetTriggersOnTransition (transition: TransitionEval) {
@@ -1521,7 +1723,7 @@ interface StateMachineInfo {
 }
 
 export class MotionStateEval extends StateEval {
-    constructor (node: MotionState, context: LayerContext) {
+    constructor (node: MotionState, context: AnimationGraphLayerWideBindingContext, overrides: ReadonlyClipOverrideMap | null) {
         super(node);
 
         this._baseSpeed = node.speed;
@@ -1529,7 +1731,7 @@ export class MotionStateEval extends StateEval {
 
         if (node.speedMultiplierEnabled && node.speedMultiplier) {
             const speedMultiplierVarName = node.speedMultiplier;
-            const varInstance = context.getVar(speedMultiplierVarName);
+            const varInstance = context.outerContext.getVar(speedMultiplierVarName);
             if (validateVariableExistence(varInstance, speedMultiplierVarName)) {
                 validateVariableType(varInstance.type, VariableType.FLOAT, speedMultiplierVarName);
                 varInstance.bind(this._setSpeedMultiplier, this);
@@ -1538,14 +1740,16 @@ export class MotionStateEval extends StateEval {
             }
         }
 
-        const sourceEvalContext: MotionEvalContext = {
-            ...context,
-        };
-        const sourceEval = node.motion?.[createEval](sourceEvalContext) ?? null;
+        const sourceEval = node.motion?.[createEval](context, overrides) ?? null;
         if (sourceEval) {
             Object.defineProperty(sourceEval, '__DEBUG_ID__', { value: this.name });
         }
+
         this._source = sourceEval;
+
+        this._fromPort = new MotionStateEvalPort(sourceEval?.createPort() ?? null);
+        this._toPort = new MotionStateEvalPort(sourceEval?.createPort() ?? null);
+
         this.components = new InstantiatedComponents(node);
     }
 
@@ -1590,12 +1794,7 @@ export class MotionStateEval extends StateEval {
     }
 
     public getFromPortStatus (): Readonly<MotionStateStatus> {
-        const { statusCache: stateStatus } = this._fromPort;
-        if (DEBUG) {
-            stateStatus.__DEBUG_ID__ = this.name;
-        }
-        stateStatus.progress = normalizeProgress(this._fromPort.progress);
-        return stateStatus;
+        return this._fromPort.getStatus(this.name);
     }
 
     public getToPortStatus (): Readonly<MotionStateStatus> {
@@ -1603,12 +1802,7 @@ export class MotionStateEval extends StateEval {
             // See `this.finishTransition()`
             assertIsTrue(!Number.isNaN(this._toPort.progress));
         }
-        const { statusCache: stateStatus } = this._toPort;
-        if (DEBUG) {
-            stateStatus.__DEBUG_ID__ = this.name;
-        }
-        stateStatus.progress = normalizeProgress(this._toPort.progress);
-        return stateStatus;
+        return this._toPort.getStatus(this.name);
     }
 
     public resetToPort (at: number) {
@@ -1629,16 +1823,16 @@ export class MotionStateEval extends StateEval {
         }
     }
 
-    public sampleFromPort (weight: number) {
-        this._source?.sample(this._fromPort.progress, weight);
+    public sampleFromPort (context: AnimationGraphEvaluationContext): Pose | null {
+        return this._fromPort.evaluate(context) ?? null;
     }
 
-    public sampleToPort (weight: number) {
+    public sampleToPort (context: AnimationGraphEvaluationContext): Pose | null {
         if (DEBUG) {
             // See `this.finishTransition()`
             assertIsTrue(!Number.isNaN(this._toPort.progress));
         }
-        this._source?.sample(this._toPort.progress, weight);
+        return this._toPort.evaluate(context) ?? null;
     }
 
     public getClipStatuses (baseWeight: number): Iterable<ClipStatus> {
@@ -1652,20 +1846,43 @@ export class MotionStateEval extends StateEval {
         }
     }
 
+    public overrideClips (overrides: ReadonlyClipOverrideMap, context: AnimationGraphLayerWideBindingContext) {
+        this._source?.overrideClips(overrides, context);
+    }
+
     private _source: MotionEval | null = null;
+    private _fromPort: MotionStateEvalPort;
+    private _toPort: MotionStateEvalPort;
     private _baseSpeed = 1.0;
     private _speed = 1.0;
-    private _fromPort: MotionEvalPort = {
-        progress: 0.0,
-        statusCache: createStateStatusCache(),
-    };
-    private _toPort: MotionEvalPort = {
-        progress: 0.0,
-        statusCache: createStateStatusCache(),
-    };
 
     private _setSpeedMultiplier (value: number) {
         this._speed = this._baseSpeed * value;
+    }
+}
+
+class MotionStateEvalPort {
+    constructor (motionPort: MotionPort | null) {
+        this.motionPort = motionPort;
+    }
+
+    public readonly motionPort: MotionPort | null = null;
+
+    public progress = 0.0;
+
+    public readonly statusCache: MotionStateStatus = createStateStatusCache();
+
+    public evaluate (context: AnimationGraphEvaluationContext) {
+        return this.motionPort?.evaluate(this.progress, context);
+    }
+
+    public getStatus (name: string): Readonly<MotionStateStatus> {
+        const { statusCache: stateStatus } = this;
+        if (DEBUG) {
+            stateStatus.__DEBUG_ID__ = name;
+        }
+        stateStatus.progress = normalizeProgress(this.progress);
+        return stateStatus;
     }
 }
 
@@ -1681,11 +1898,6 @@ function calcProgressUpdate (currentProgress: number, duration: number, deltaTim
 function normalizeProgress (progress: number) {
     const signedFrac = progress - Math.trunc(progress);
     return signedFrac >= 0.0 ? signedFrac : (1.0 + signedFrac);
-}
-
-interface MotionEvalPort {
-    progress: number;
-    statusCache: MotionStateStatus;
 }
 
 export class SpecialStateEval extends StateEval {
@@ -1727,21 +1939,41 @@ class TransitionSnapshotEval extends StateEval {
         return queue[0].motion;
     }
 
-    public sample (weight: number) {
+    public sample (context: AnimationGraphEvaluationContext): Pose {
         const { _queue: queue } = this;
         const nQueue = queue.length;
+        assertIsTrue(nQueue !== 0);
+        let finalPose: Pose | null = null;
+        let sumWeight = 0.0;
         for (let iQueuedMotions = 0; iQueuedMotions < nQueue; ++iQueuedMotions) {
             const {
                 motion,
                 weight: snapshotWeight,
             } = queue[iQueuedMotions];
             // Here implies: motions added to snapshot should have been switched from "target" to "source".
-            motion.sampleFromPort(snapshotWeight * weight);
+            const queuedMotionPose = motion.sampleFromPort(context) ?? context.pushDefaultedPose();
+            sumWeight += snapshotWeight;
+            if (!finalPose) {
+                finalPose = queuedMotionPose;
+            } else {
+                if (sumWeight) {
+                    const t = snapshotWeight / sumWeight;
+                    blendPoseInto(finalPose, queuedMotionPose, t);
+                }
+                context.popPose();
+            }
         }
+        return finalPose ?? context.pushDefaultedPose();
     }
 
     public clear () {
         this._queue.length = 0;
+
+        const { _heldTransitions: heldTransitions } = this;
+        const nTransitions = heldTransitions.length;
+        for (let iTransition = 0; iTransition < nTransitions; ++iTransition) {
+            heldTransitions[iTransition].activated = false;
+        }
     }
 
     public enqueue (state: MotionStateEval, weight: number) {
@@ -1754,7 +1986,15 @@ class TransitionSnapshotEval extends StateEval {
         queue.push(new QueuedMotion(state, weight));
     }
 
+    public transferTransitions (transitions: readonly TransitionEval[]) {
+        if (DEBUG) {
+            assertIsTrue(transitions.every((transition) => transition.activated));
+        }
+        this._heldTransitions.push(...transitions);
+    }
+
     private _queue: QueuedMotion[] = [];
+    private _heldTransitions: TransitionEval[] = [];
 }
 
 export type NodeEval = MotionStateEval | SpecialStateEval | EmptyStateEval | TransitionSnapshotEval;
@@ -1773,6 +2013,11 @@ interface TransitionEval {
      */
     triggers: string[] | undefined;
     interruption: TransitionInterruptionSource;
+
+    /**
+     * Whether the transition is activated, if it has already been activated, it can not be activated(matched) again.
+     */
+    activated: boolean;
 }
 
 export type { VarInstance } from './variable';

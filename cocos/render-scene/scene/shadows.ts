@@ -1,18 +1,17 @@
 /*
- Copyright (c) 2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2020-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -21,18 +20,14 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- */
+*/
 
 import { DEBUG } from 'internal:constants';
 import { Material } from '../../asset/assets/material';
-import { Sphere } from '../../core/geometry';
-import { Color, Mat4, Vec3, Vec2 } from '../../core/math';
-import { legacyCC } from '../../core/global-exports';
-import { Enum } from '../../core/value-types';
-import type { ShadowsInfo } from '../../core/scene-graph/scene-globals';
+import { Color, Mat4, Vec3, Vec2, Enum, assert, geometry, cclegacy } from '../../core';
+import type { ShadowsInfo } from '../../scene-graph/scene-globals';
 import { IMacroPatch } from '../core/pass';
 import { Shader } from '../../gfx';
-import { assert } from '../../core/platform/debug';
 
 /**
  * @zh 阴影贴图分辨率。
@@ -314,7 +309,7 @@ export class Shadows {
      * @en The bounding sphere of the shadow map.
      * @zh 用于计算固定区域阴影 Shadow map 的场景包围球.
      */
-    public fixedSphere: Sphere = new Sphere(0.0, 0.0, 0.0, 0.01);
+    public fixedSphere: geometry.Sphere = new geometry.Sphere(0.0, 0.0, 0.0, 0.01);
 
     /**
      * @en get or set shadow max received.
@@ -393,13 +388,13 @@ export class Shadows {
             if (this.type === ShadowType.Planar) {
                 this._updatePlanarInfo();
             } else {
-                const root = legacyCC.director.root;
+                const root = cclegacy.director.root;
                 const pipeline = root.pipeline;
                 pipeline.macros.CC_SHADOW_TYPE = 2;
                 root.onGlobalPipelineStateChanged();
             }
         } else {
-            const root = legacyCC.director.root;
+            const root = cclegacy.director.root;
             const pipeline = root.pipeline;
             pipeline.macros.CC_SHADOW_TYPE = 0;
             root.onGlobalPipelineStateChanged();
@@ -415,7 +410,7 @@ export class Shadows {
             this._instancingMaterial = new Material();
             this._instancingMaterial.initialize({ effectName: 'pipeline/planar-shadow', defines: { USE_INSTANCING: true } });
         }
-        const root = legacyCC.director.root;
+        const root = cclegacy.director.root;
         const pipeline = root.pipeline;
         pipeline.macros.CC_SHADOW_TYPE = 1;
         root.onGlobalPipelineStateChanged();
@@ -433,4 +428,4 @@ export class Shadows {
     }
 }
 
-legacyCC.Shadows = Shadows;
+cclegacy.Shadows = Shadows;

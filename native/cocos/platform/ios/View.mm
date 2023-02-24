@@ -57,8 +57,8 @@ namespace {
                                       static_cast<float>([touch locationInView:[touch view]].y),
                                       static_cast<int>((intptr_t)touch)});
     }
-    CC_ASSERT(_platform != nullptr);
-    _platform->dispatchTouchEvent(touchEvent);
+    CC_ASSERT_NOT_NULL(_platform);
+    cc::events::Touch::broadcast(touchEvent);
 }
 
 - (id)initWithFrame:(CGRect)frame {

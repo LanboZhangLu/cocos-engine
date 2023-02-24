@@ -1,18 +1,17 @@
 /*
- Copyright (c) 2019-2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2019-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
-  worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
-  not use Cocos Creator software for developing other software or tools that's
-  used for developing games. You are not granted to publish, distribute,
-  sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -21,29 +20,26 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- */
+*/
 
 import { EDITOR } from 'internal:constants';
 import { Asset } from '../assets/asset';
-import { legacyCC } from '../../core/global-exports';
-import { error } from '../../core/platform/debug';
-import { js } from '../../core/utils/js';
-import { callInNextTick } from '../../core/utils/misc';
+import { cclegacy, error, js, misc } from '../../core';
 import Config from './config';
 import { dependMap, nativeDependMap } from './depend-maps';
 import dependUtil from './depend-util';
 import { isScene } from './helper';
 import RequestItem from './request-item';
-import { assets, AssetType, CompleteCallbackNoData, CompleteCallback, IOptions, ProgressCallback, references } from './shared';
+import { assets, references } from './shared';
 import Task from './task';
 
-let defaultProgressCallback: ProgressCallback | null = null;
+let defaultProgressCallback: ((finished: number, total: number, item: RequestItem) => void) | null = null;
 
 declare class WeakRef {
     constructor (obj: any);
 }
 
-export function setDefaultProgressCallback (onProgress: ProgressCallback) {
+export function setDefaultProgressCallback (onProgress: (finished: number, total: number, item: RequestItem) => void) {
     defaultProgressCallback = onProgress;
 }
 
@@ -71,9 +67,9 @@ export function urlAppendTimestamp (url: string, append: boolean): string {
     return url;
 }
 
-export type RetryFunction = (times: number, done: CompleteCallback) => void;
+export type RetryFunction = (times: number, done: ((err: Error | null, data?: any | null) => void)) => void;
 
-export function retry (process: RetryFunction, times: number, wait: number, onComplete: CompleteCallback, index = 0) {
+export function retry (process: RetryFunction, times: number, wait: number, onComplete: ((err: Error | null, data?: any | null) => void), index = 0) {
     process(index, (err, result) => {
         index++;
         if (!err || index > times) {
@@ -112,7 +108,7 @@ export function getDepends (uuid: string, data: Asset | Record<string, any>, exc
 
 export function cache (id: string, asset: Asset, cacheAsset?: boolean) {
     if (!asset) { return; }
-    cacheAsset = cacheAsset !== undefined ? cacheAsset : legacyCC.assetManager.cacheAsset;
+    cacheAsset = cacheAsset !== undefined ? cacheAsset : cclegacy.assetManager.cacheAsset;
     if (!isScene(asset) && cacheAsset && !asset.isDefault) {
         assets.add(id, asset);
     }
@@ -186,7 +182,7 @@ export function gatherAsset (task: Task) {
     }
 }
 
-type ForEachFunction<T> = (item: T, done: CompleteCallbackNoData) => void;
+type ForEachFunction<T> = (item: T, done: ((err?: Error | null) => void)) => void;
 
 export function forEach<T = any> (array: T[], process: ForEachFunction<T>, onComplete: (errs: Error[]) => void) {
     let count = 0;
@@ -212,20 +208,20 @@ export function forEach<T = any> (array: T[], process: ForEachFunction<T>, onCom
 }
 
 interface IParameters<T> {
-    options: IOptions;
-    onProgress: ProgressCallback | null;
+    options: Record<string, any>;
+    onProgress: ((finished: number, total: number, item: RequestItem) => void) | null;
     onComplete: T | null;
 }
 
 interface ILoadResArgs<T> {
-    type: AssetType | null;
-    onProgress: ProgressCallback | null;
+    type: Constructor<Asset> | null;
+    onProgress: ((finished: number, total: number, item: RequestItem) => void) | null;
     onComplete: T | null;
 }
 
 export function parseParameters<T extends (...args) => void> (
-    options: IOptions | ProgressCallback | T | null | undefined,
-    onProgress: ProgressCallback | T | null | undefined,
+    options: Record<string, any> | ((finished: number, total: number, item: RequestItem) => void) | T | null | undefined,
+    onProgress: ((finished: number, total: number, item: RequestItem) => void) | T | null | undefined,
     onComplete: T | null | undefined): IParameters<T> {
     let optionsOut: any = options;
     let onProgressOut: any = onProgress;
@@ -243,7 +239,7 @@ export function parseParameters<T extends (...args) => void> (
             onProgressOut = null;
         }
         if (onProgress !== undefined && isCallback) {
-            onProgressOut = options as ProgressCallback;
+            onProgressOut = options as ((finished: number, total: number, item: RequestItem) => void);
             optionsOut = null;
         }
     }
@@ -252,14 +248,14 @@ export function parseParameters<T extends (...args) => void> (
 }
 
 export function parseLoadResArgs<T extends (...args) => void> (
-    type: AssetType | ProgressCallback | T | null | undefined,
-    onProgress: ProgressCallback | T | null | undefined,
+    type: Constructor<Asset> | ((finished: number, total: number, item: RequestItem) => void) | T | null | undefined,
+    onProgress: ((finished: number, total: number, item: RequestItem) => void) | T | null | undefined,
     onComplete: T | null | undefined): ILoadResArgs<T> {
     let typeOut: any = type;
     let onProgressOut: any = onProgress;
     let onCompleteOut: any = onComplete;
     if (onComplete === undefined) {
-        const isValidType = js.isChildClassOf(type as AssetType, Asset);
+        const isValidType = js.isChildClassOf(type as Constructor<Asset>, Asset);
         if (onProgress) {
             onCompleteOut = onProgress as T;
             if (isValidType) {
@@ -271,7 +267,7 @@ export function parseLoadResArgs<T extends (...args) => void> (
             typeOut = null;
         }
         if (onProgress !== undefined && !isValidType) {
-            onProgressOut = type as ProgressCallback;
+            onProgressOut = type as ((finished: number, total: number, item: RequestItem) => void);
             typeOut = null;
         }
     }
@@ -308,7 +304,7 @@ export function asyncify (cb: ((p1?: any, p2?: any) => void) | null): (p1?: any,
         } else if (p2 instanceof Asset) {
             refs.push(p2.addRef());
         }
-        callInNextTick(() => {
+        misc.callInNextTick(() => {
             refs.forEach((x) => x.decRef(false));
             cb(p1, p2);
         });

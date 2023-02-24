@@ -8,21 +8,28 @@ struct LightingIntermediateData
   float NoLSat, NoVSat, NoHSat;//, VoHSat; // clamped to 0-1
   float NoVAbsSat; // abs and clamped to 1
 
+  HIGHP_VALUE_STRUCT_DEFINE(vec3, worldPosition);
+
   // for advanced material
   vec3 T, B;
 
   // material data
   float specularParam; // roughness or specular power
+  float ior;
+
 #if CC_SURFACES_LIGHTING_ANISOTROPIC
   float anisotropyShape;
 #endif
 
-  // #if CC_SURFACES_LIGHTING_SPECULAR_2ND
-  // float specularParam2nd, specularIntensity2nd, specularRotation2nd; // for hair
-  // vec3 specularColor2nd;
-  // #endif
+#if CC_SURFACES_LIGHTING_TRANSMIT_DIFFUSE
+  vec4 shadowPosAndDepth; //xy: shadowmap uv, z: camera depth from pixel LVP, w: camera depth from shadowmap
+  vec4 transmitDiffuseParams; //zw: min/max DepthWS for shadowmap and 0 means disable shadow transmit,  x: transmit irradiance apply shadow, y: additional transmit depth mask, 可补充shadowmap cover不到的地方，也可以在minmax屏蔽掉shadowmap之后给专门的薄片穿透
+#endif
+#if CC_SURFACES_LIGHTING_TRANSMIT_SPECULAR || CC_SURFACES_LIGHTING_TRANSMIT_DIFFUSE
+  vec4 transmitParams; // xy: extinction coef for out/in-scattering, z: in-scattering coef, w: transmit distance(water depth, leaf thickness)
+  vec3 inScatteringLightColor;
+#endif
   // #if CC_SURFACES_LIGHTING_CLEAR_COAT
-  // float ior;
   // float roughnessClearCoat; // for clear coat or multi-layer pbr
   // #endif
 };
@@ -46,11 +53,19 @@ void CCSurfacesLightingGetIntermediateData_PerPixel(inout LightingIntermediateDa
   data.NoVSat = max(data.NoV, 0.0);
   data.NoVAbsSat = max(abs(data.NoV), 0.0);
 
+  HIGHP_VALUE_TO_STRUCT_DEFINED(worldPos, data.worldPosition);
   data.T = worldTangent;
   data.B = worldBinormal;
 
 #if CC_SURFACES_LIGHTING_ANISOTROPIC
   data.anisotropyShape = anisotropyShape;
+#endif
+#if CC_SURFACES_LIGHTING_TRANSMIT_SPECULAR || CC_SURFACES_LIGHTING_TRANSMIT_DIFFUSE
+  data.inScatteringLightColor = vec3(0.0);
+  data.transmitParams = vec4(0.0);
+#endif
+#if CC_SURFACES_LIGHTING_TRANSMIT_DIFFUSE
+  data.shadowPosAndDepth = vec4(0.0, 0.0, 999999.0, 999999.0);
 #endif
 }
 

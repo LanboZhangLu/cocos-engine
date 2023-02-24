@@ -1,18 +1,17 @@
 /****************************************************************************
- Copyright (c) 2020-2021 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2020-2023 Xiamen Yaji Software Co., Ltd.
 
  http://www.cocos.com
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -32,16 +31,17 @@
 namespace cc {
 namespace gfx {
 
-namespace anoymous {
-CCWGPUSampler *defaultSampler = nullptr;
-}
+namespace {
+CCWGPUSampler *dftFilterableSampler = nullptr;
+CCWGPUSampler *dftUnfilterableSampler = nullptr;
+} // namespace
 
 using namespace emscripten;
 
-CCWGPUSampler::CCWGPUSampler(const SamplerInfo &info) : wrapper<Sampler>(val::object(), info) {
+CCWGPUSampler::CCWGPUSampler(const SamplerInfo &info) : Sampler(info) {
     WGPUSamplerDescriptor descriptor = {
         .nextInChain = nullptr,
-        .label = nullptr,
+        .label = (std::to_string(static_cast<uint32_t>(info.minFilter)) + " " + std::to_string(static_cast<uint32_t>(info.magFilter)) + " " + std::to_string(static_cast<uint32_t>(info.mipFilter))).c_str(),
         .addressModeU = toWGPUAddressMode(info.addressU),
         .addressModeV = toWGPUAddressMode(info.addressV),
         .addressModeW = toWGPUAddressMode(info.addressW),
@@ -50,7 +50,7 @@ CCWGPUSampler::CCWGPUSampler(const SamplerInfo &info) : wrapper<Sampler>(val::ob
         .mipmapFilter = toWGPUFilterMode(info.mipFilter),
         .lodMinClamp = 0.0f,
         .lodMaxClamp = std::numeric_limits<float>::max(),
-        .compare = WGPUCompareFunction_Undefined, //toWGPUCompareFunction(info.cmpFunc),
+        .compare = WGPUCompareFunction_Undefined, // toWGPUCompareFunction(info.cmpFunc),
         .maxAnisotropy = static_cast<uint16_t>(info.maxAnisotropy),
     };
 
@@ -62,21 +62,38 @@ CCWGPUSampler::~CCWGPUSampler() {
     wgpuSamplerRelease(_wgpuSampler);
 }
 
-CCWGPUSampler *CCWGPUSampler::defaultSampler() {
-    if (!anoymous::defaultSampler) {
+CCWGPUSampler *CCWGPUSampler::defaultFilterableSampler() {
+    if (!dftFilterableSampler) {
         SamplerInfo info = {
             .minFilter = Filter::LINEAR,
             .magFilter = Filter::LINEAR,
-            .mipFilter = Filter::NONE,
+            .mipFilter = Filter::LINEAR,
             .addressU = Address::WRAP,
             .addressV = Address::WRAP,
             .addressW = Address::WRAP,
             .maxAnisotropy = 0,
             .cmpFunc = ComparisonFunc::ALWAYS,
         };
-        anoymous::defaultSampler = ccnew CCWGPUSampler(info);
+        dftFilterableSampler = ccnew CCWGPUSampler(info);
     }
-    return anoymous::defaultSampler;
+    return dftFilterableSampler;
+}
+
+CCWGPUSampler *CCWGPUSampler::defaultUnfilterableSampler() {
+    if (!dftUnfilterableSampler) {
+        SamplerInfo info = {
+            .minFilter = Filter::POINT,
+            .magFilter = Filter::POINT,
+            .mipFilter = Filter::POINT,
+            .addressU = Address::WRAP,
+            .addressV = Address::WRAP,
+            .addressW = Address::WRAP,
+            .maxAnisotropy = 0,
+            .cmpFunc = ComparisonFunc::ALWAYS,
+        };
+        dftUnfilterableSampler = ccnew CCWGPUSampler(info);
+    }
+    return dftUnfilterableSampler;
 }
 
 } // namespace gfx

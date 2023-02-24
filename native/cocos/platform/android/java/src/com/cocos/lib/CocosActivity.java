@@ -24,8 +24,6 @@
 
 package com.cocos.lib;
 
-import android.content.Context;
-import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.media.AudioManager;
@@ -42,29 +40,29 @@ import android.widget.FrameLayout;
 import com.google.androidgamesdk.GameActivity;
 
 import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.List;
 
 public class CocosActivity extends GameActivity {
     private static final String TAG = "CocosActivity";
-    private static final boolean ENABLE_SUBSURFACE = false;
     private CocosWebViewHelper mWebViewHelper = null;
     private CocosVideoHelper mVideoHelper = null;
-    private CocosOrientationHelper mOrientationHelper = null;
 
     private CocosSensorHandler mSensorHandler;
-    private CocosSurfaceView mSubsurfaceView;
+    private List<CocosSurfaceView> mSurfaceViewArray;
+    private FrameLayout mRootLayout;
 
 
 
-    private native void onCreateNative(Context activity);
+    private native void onCreateNative();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         onLoadNativeLibraries();
-        onCreateNative(this.getApplicationContext());
+        onCreateNative();
 
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
         getWindow().requestFeature(Window.FEATURE_NO_TITLE);
-        setTheme( R.style.Theme_AppCompat_Light_NoActionBar);
         super.onCreate(savedInstanceState);
 
         GlobalObject.setActivity(this);
@@ -82,11 +80,6 @@ public class CocosActivity extends GameActivity {
         setImmersiveMode();
 
         Utils.hideVirtualButton();
-
-        int orientation = getRequestedOrientation();
-        if (orientation == ActivityInfo.SCREEN_ORIENTATION_SENSOR || orientation == ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE || orientation == ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT) {
-            mOrientationHelper = new CocosOrientationHelper(this);
-        }
     }
 
     private void setImmersiveMode() {
@@ -114,21 +107,17 @@ public class CocosActivity extends GameActivity {
     }
 
     protected void initView() {
-        FrameLayout frameLayout = findViewById(contentViewId);
+        mRootLayout = findViewById(contentViewId);
         if (mWebViewHelper == null) {
-            mWebViewHelper = new CocosWebViewHelper(frameLayout);
+            mWebViewHelper = new CocosWebViewHelper(mRootLayout);
         }
 
         if (mVideoHelper == null) {
-            mVideoHelper = new CocosVideoHelper(this, frameLayout);
-        }
-        if (ENABLE_SUBSURFACE) {
-            mSubsurfaceView = new CocosSurfaceView(this);
-            mSubsurfaceView.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-            //mSubsurfaceView.setBackgroundColor(Color.BLUE);
-            frameLayout.addView(mSubsurfaceView, 1000, 1000);
+            mVideoHelper = new CocosVideoHelper(this, mRootLayout);
         }
     }
+
+
 
     public SurfaceView getSurfaceView() {
         return this.mSurfaceView;
@@ -146,18 +135,12 @@ public class CocosActivity extends GameActivity {
     protected void onPause() {
         super.onPause();
         mSensorHandler.onPause();
-        if (null != mOrientationHelper) {
-            mOrientationHelper.onPause();
-        }
     }
 
     @Override
     protected void onResume() {
         super.onResume();
         mSensorHandler.onResume();
-        if (null != mOrientationHelper) {
-            mOrientationHelper.onResume();
-        }
         Utils.hideVirtualButton();
         if (CocosAudioFocusManager.isAudioFocusLoss()) {
             CocosAudioFocusManager.registerAudioFocusListener(this);
@@ -168,12 +151,22 @@ public class CocosActivity extends GameActivity {
     protected void onStop() {
         super.onStop();
         mSurfaceView.setVisibility(View.INVISIBLE);
+        if (null != mSurfaceViewArray) {
+            for (CocosSurfaceView surfaceView : mSurfaceViewArray) {
+                surfaceView.setVisibility(View.INVISIBLE);
+            }
+        }
     }
 
     @Override
     protected void onStart() {
         super.onStart();
         mSurfaceView.setVisibility(View.VISIBLE);
+        if (null != mSurfaceViewArray) {
+            for (CocosSurfaceView surfaceView : mSurfaceViewArray) {
+                surfaceView.setVisibility(View.VISIBLE);
+            }
+        }
     }
 
     @Override
@@ -182,6 +175,27 @@ public class CocosActivity extends GameActivity {
         if (hasFocus && CocosAudioFocusManager.isAudioFocusLoss()) {
             CocosAudioFocusManager.registerAudioFocusListener(this);
         }
+    }
+
+    // invoke from native code
+    @SuppressWarnings({"UnusedDeclaration"})
+    private void createSurface(int x, int y, int width, int height, int windowId) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                CocosSurfaceView view = new CocosSurfaceView(CocosActivity.this, windowId);
+                view.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(width, height);
+                params.leftMargin = x;
+                params.topMargin = y;
+                //mSubsurfaceView.setBackgroundColor(Color.BLUE);
+                mRootLayout.addView(view, params);
+                if (null == mSurfaceViewArray) {
+                    mSurfaceViewArray = new ArrayList<>();
+                }
+                mSurfaceViewArray.add(view);
+            }
+        });
     }
 
     private void onLoadNativeLibraries() {

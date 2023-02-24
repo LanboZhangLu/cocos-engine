@@ -14,6 +14,9 @@
 
 // Insert code at the beginning of generated source file (.cpp)
 %{
+#include "bindings/auto/jsb_2d_auto.h"
+#include "bindings/auto/jsb_assets_auto.h"
+#include "bindings/auto/jsb_cocos_auto.h"
 #include "bindings/auto/jsb_dragonbones_auto.h"
 %}
 
@@ -57,7 +60,6 @@
 %ignore dragonBones::CCFactory::destroyInstance;
 %ignore dragonBones::CCFactory::loadDragonBonesData;
 %ignore dragonBones::CCFactory::loadTextureAtlasData;
-%ignore dragonBones::CCFactory::getRenderOrder;
 
 %ignore dragonBones::BaseFactory::replaceDisplay;
 %ignore dragonBones::BaseFactory::getAllTextureAtlasData;
@@ -80,7 +82,6 @@
 %ignore dragonBones::Armature::getSlots;
 %ignore dragonBones::Armature::getDisplay;
 %ignore dragonBones::Armature::getTypeIndex;
-%ignore dragonBones::Armature::getRenderOrder;
 %ignore dragonBones::Armature::_dragonBones;
 %ignore dragonBones::Armature::_constraints;
 
@@ -298,6 +299,15 @@
 %ignore dragonBones::EventObject::data;
 %ignore dragonBones::EventObject::getTypeIndex;
 %ignore dragonBones::EventObject::actionDataToInstance;
+%ignore dragonBones::EventObject::START;
+%ignore dragonBones::EventObject::LOOP_COMPLETE;
+%ignore dragonBones::EventObject::COMPLETE;
+%ignore dragonBones::EventObject::FADE_IN;
+%ignore dragonBones::EventObject::FADE_IN_COMPLETE;
+%ignore dragonBones::EventObject::FADE_OUT;
+%ignore dragonBones::EventObject::FADE_OUT_COMPLETE;
+%ignore dragonBones::EventObject::FRAME_EVENT;
+%ignore dragonBones::EventObject::SOUND_EVENT;
 
 %ignore dragonBones::TextureData::copyFrom;
 %ignore dragonBones::TextureData::rotated;
@@ -314,7 +324,8 @@
 
 %ignore dragonBones::CCArmatureDisplay::render;
 %ignore dragonBones::CCArmatureDisplay::update;
-%ignore dragonBones::CCArmatureDisplay::getRenderOrder;
+%ignore dragonBones::CCArmatureDisplay::requestDrawInfo;
+%ignore dragonBones::CCArmatureDisplay::requestMaterial;
 
 %ignore dragonBones::RealTimeAttachUtil::syncAttachedNode;
 
@@ -322,7 +333,8 @@
 
 %ignore dragonBones::AttachUtilBase::releaseAttachedNode;
 
-%ignore dragonBones::CCArmatureCacheDisplay::getRenderOrder;
+%ignore dragonBones::CCArmatureCacheDisplay::requestDrawInfo;
+%ignore dragonBones::CCArmatureCacheDisplay::requestMaterial;
 
 %ignore dragonBones::ArmatureCache::SegmentData;
 %ignore dragonBones::ArmatureCache::BoneData;

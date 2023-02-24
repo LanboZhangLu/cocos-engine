@@ -1,19 +1,18 @@
 /*
  Copyright (c) 2013-2016 Chukong Technologies Inc.
- Copyright (c) 2017-2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2017-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
-  worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
-  not use Cocos Creator software for developing other software or tools that's
-  used for developing games. You are not granted to publish, distribute,
-  sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -25,16 +24,14 @@
 */
 
 import { legacyCC, VERSION } from './global-exports';
-import * as easing from './algorithm/easing';
 import * as geometry from './geometry';
 import * as math from './math';
 import * as memop from './memop';
-import './splash-screen';
 import './deprecated';
+import './deprecated-3.7.0';
 
 legacyCC.math = math;
 legacyCC.geometry = geometry;
-legacyCC.easing = easing;
 
 export { math, memop, geometry, VERSION };
 
@@ -45,18 +42,13 @@ export * from './utils';
 export * from './data';
 export * from './event';
 export * from './platform';
-export * from './game';
-export { Root } from './root';
 export * from './scheduler';
-export * from './director';
-export * from './algorithm/murmurhash2_gc';
-export * from './pipeline';
-export * from './scene-graph';
-export * from './components';
 export * from './curves';
 export * from './settings';
-
-export * from './pipeline/custom/builtin-pipelines';
-
+export * from './system';
+export * from './algorithm';
+export { legacyCC as cclegacy } from './global-exports';
 export * from './curves/bezier';
-export { easing };
+
+// TODO: should not include engine internal exports when module mechanism is implemented.
+export * from './internal-index';

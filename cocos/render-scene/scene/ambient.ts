@@ -1,18 +1,17 @@
 /*
- Copyright (c) 2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2020-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -21,11 +20,10 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- */
+*/
 
-import { Vec4 } from '../../core/math';
-import { legacyCC } from '../../core/global-exports';
-import { AmbientInfo } from '../../core/scene-graph/scene-globals';
+import { Vec4, cclegacy } from '../../core';
+import { AmbientInfo } from '../../scene-graph/scene-globals';
 
 /**
  * @en Ambient lighting representation in the render scene.
@@ -60,7 +58,7 @@ export class Ambient {
      * @zh 天空颜色
      */
     get skyColor (): Vec4 {
-        const isHDR = (legacyCC.director.root).pipeline.pipelineSceneData.isHDR;
+        const isHDR = (cclegacy.director.root).pipeline.pipelineSceneData.isHDR;
         if (isHDR) {
             return this._skyColorHDR;
         } else {
@@ -68,7 +66,7 @@ export class Ambient {
         }
     }
     set skyColor (color: Vec4) {
-        const isHDR = (legacyCC.director.root).pipeline.pipelineSceneData.isHDR;
+        const isHDR = (cclegacy.director.root).pipeline.pipelineSceneData.isHDR;
         if (isHDR) {
             this._skyColorHDR.set(color);
         } else {
@@ -81,7 +79,7 @@ export class Ambient {
      * @zh 天空亮度
      */
     get skyIllum (): number {
-        const isHDR = (legacyCC.director.root).pipeline.pipelineSceneData.isHDR;
+        const isHDR = (cclegacy.director.root).pipeline.pipelineSceneData.isHDR;
         if (isHDR) {
             return this._skyIllumHDR;
         } else {
@@ -89,7 +87,7 @@ export class Ambient {
         }
     }
     set skyIllum (illum: number) {
-        const isHDR = (legacyCC.director.root).pipeline.pipelineSceneData.isHDR;
+        const isHDR = (cclegacy.director.root).pipeline.pipelineSceneData.isHDR;
         if (isHDR) {
             this._skyIllumHDR = illum;
         } else {
@@ -101,7 +99,7 @@ export class Ambient {
      * @zh 地面颜色
      */
     get groundAlbedo (): Vec4 {
-        const isHDR = (legacyCC.director.root).pipeline.pipelineSceneData.isHDR;
+        const isHDR = (cclegacy.director.root).pipeline.pipelineSceneData.isHDR;
         if (isHDR) {
             return this._groundAlbedoHDR;
         } else {
@@ -109,7 +107,7 @@ export class Ambient {
         }
     }
     set groundAlbedo (color: Vec4) {
-        const isHDR = (legacyCC.director.root).pipeline.pipelineSceneData.isHDR;
+        const isHDR = (cclegacy.director.root).pipeline.pipelineSceneData.isHDR;
         if (isHDR) {
             this._groundAlbedoHDR.set(color);
         } else {
@@ -141,4 +139,4 @@ export class Ambient {
     }
 }
 
-legacyCC.Ambient = Ambient;
+cclegacy.Ambient = Ambient;

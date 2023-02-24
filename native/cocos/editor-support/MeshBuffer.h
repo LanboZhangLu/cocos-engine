@@ -1,18 +1,17 @@
 /****************************************************************************
- Copyright (c) 2020-2022 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2020-2023 Xiamen Yaji Software Co., Ltd.
 
  http://www.cocos.com
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -28,6 +27,10 @@
 #include "IOBuffer.h"
 #include "IOTypedArray.h"
 #include "base/std/container/vector.h"
+
+namespace cc {
+class UIMeshBuffer;
+};
 
 MIDDLEWARE_BEGIN
 
@@ -72,7 +75,7 @@ public:
         return _bufferPos + 1;
     }
 
-    std::size_t getBufferPos() const {
+    uint16_t getBufferPos() const {
         return _bufferPos;
     }
 
@@ -84,6 +87,10 @@ public:
         return _ib;
     }
 
+    cc::UIMeshBuffer *getUIMeshBuffer() const;
+
+    const ccstd::vector<cc::UIMeshBuffer *> &uiMeshBuffers() const;
+
     void uploadVB();
     void uploadIB();
     void reset();
@@ -93,10 +100,13 @@ private:
     void clear();
     void init();
     void afterCleanupHandle();
+    void addUIMeshBuffer();
+    void cleanUIMeshBuffer();
 
     ccstd::vector<IOTypedArray *> _ibArr;
     ccstd::vector<IOTypedArray *> _vbArr;
-    std::size_t _bufferPos = 0;
+    ccstd::vector<cc::UIMeshBuffer *> _uiMeshBufferArr;
+    uint16_t _bufferPos = 0;
     IOBuffer _vb;
     IOBuffer _ib;
     int _vertexFormat = 0;

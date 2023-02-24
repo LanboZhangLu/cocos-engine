@@ -49,14 +49,21 @@
 //  1. 'Ignore Section' should be placed before attribute definition and %import/%include
 //  2. namespace is needed
 //
+%ignore cc::RefCounted;
 %ignore cc::Asset::createNode; //FIXME: swig needs to support std::function
-// %ignore cc::IMemoryImageSource::data;
+%ignore cc::IMemoryImageSource::data;
+%ignore cc::IMemoryImageSource::compressed;
 %ignore cc::SimpleTexture::uploadDataWithArrayBuffer;
 %ignore cc::TextureCube::_mipmaps;
 // %ignore cc::Mesh::copyAttribute;
 // %ignore cc::Mesh::copyIndices;
 %ignore cc::Material::setProperty;
 %ignore cc::ImageAsset::setData;
+%ignore cc::EffectAsset::_techniques;
+%ignore cc::EffectAsset::_shaders;
+%ignore cc::EffectAsset::_combinations;
+%ignore cc::IPassInfoFull::passID;
+%ignore cc::IPassInfoFull::phaseID;
 
 // ----- Rename Section ------
 // Brief: Classes, methods or attributes needs to be renamed
@@ -77,12 +84,10 @@
 
 %rename(_getProperty) cc::Material::getProperty;
 %rename(_propsInternal) cc::Material::_props;
+%rename(getHash) cc::Material::getHashForMaterial;
 
 %rename(_getBindposes) cc::Skeleton::getBindposes;
 %rename(_setBindposes) cc::Skeleton::setBindposes;
-
-%rename(_data) cc::IMemoryImageSource::data;
-%rename(_compressed) cc::IMemoryImageSource::compressed;
 
 %rename(buffer) cc::BufferAsset::getBuffer;
 
@@ -181,9 +186,12 @@
 //   %import "your_header_file.h" will not generate code for that header file
 //
 %import "base/Macros.h"
+%import "base/RefCounted.h"
 %import "base/TypeDef.h"
 %import "base/Ptr.h"
 %import "base/memory/Memory.h"
+
+%import "core/event/Event.h"
 
 %include "core/Types.h"
 

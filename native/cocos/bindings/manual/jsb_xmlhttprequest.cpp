@@ -1,18 +1,17 @@
 /****************************************************************************
- Copyright (c) 2017-2021 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2017-2023 Xiamen Yaji Software Co., Ltd.
 
  http://www.cocos.com
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -23,13 +22,6 @@
  THE SOFTWARE.
 ****************************************************************************/
 
-//
-//  jsb_XMLHttpRequest.cpp
-//  cocos2d_js_bindings
-//
-//  Created by James Chen on 5/15/17.
-//
-//
 #include "jsb_xmlhttprequest.h"
 #include <algorithm>
 #include <functional>
@@ -357,12 +349,12 @@ void XMLHttpRequest::getHeader(const ccstd::string &header) {
         http_field = header.substr(0, found_header_field);
         http_value = header.substr(found_header_field + 1, header.length());
 
-        // Get rid of all \n
+        // trim \n at the end of the string
         if (!http_value.empty() && http_value[http_value.size() - 1] == '\n') {
             http_value.erase(http_value.size() - 1);
         }
 
-        // Get rid of leading space (header is field: value format)
+        // trim leading space (header is field: value format)
         if (!http_value.empty() && http_value[0] == ' ') {
             http_value.erase(0, 1);
         }
@@ -544,15 +536,15 @@ void XMLHttpRequest::setRequestHeader(const ccstd::string &key, const ccstd::str
 }
 
 ccstd::string XMLHttpRequest::getAllResponseHeaders() const {
-    std::stringstream responseheaders;
-    ccstd::string responseheader;
+    std::stringstream responseHeaders;
+    ccstd::string responseHeader;
 
     for (const auto &it : _httpHeader) {
-        responseheaders << it.first << ": " << it.second << "\n";
+        responseHeaders << it.first << ": " << it.second << "\n";
     }
 
-    responseheader = responseheaders.str();
-    return responseheader;
+    responseHeader = responseHeaders.str();
+    return responseHeader;
 }
 
 ccstd::string XMLHttpRequest::getResponseHeader(const ccstd::string &key) const {
@@ -568,26 +560,14 @@ ccstd::string XMLHttpRequest::getResponseHeader(const ccstd::string &key) const 
 }
 
 void XMLHttpRequest::setHttpRequestHeader() {
-    ccstd::vector<ccstd::string> header;
+    ccstd::vector<ccstd::string> headers;
 
     for (auto &it : _requestHeader) {
-        const char *first = it.first.c_str();
-        const char *second = it.second.c_str();
-        size_t len = sizeof(char) * (strlen(first) + 3 + strlen(second));
-        char *test = static_cast<char *>(malloc(len));
-        memset(test, 0, len);
-
-        strcpy(test, first);
-        strcpy(test + strlen(first), ": ");
-        strcpy(test + strlen(first) + 2, second);
-
-        header.emplace_back(test);
-
-        free(test);
+        headers.emplace_back(it.first + ": " + it.second);
     }
 
-    if (!header.empty()) {
-        _httpRequest->setHeaders(header);
+    if (!headers.empty()) {
+        _httpRequest->setHeaders(headers);
     }
 }
 
@@ -883,6 +863,8 @@ static bool XMLHttpRequest_getResponse(se::State &s) { //NOLINT(readability-iden
                 } else {
                     s.rval().setNull();
                 }
+            } else if (xhr->getResponseType() == XMLHttpRequest::ResponseType::BLOB) {
+                SE_PRECONDITION2(false, false, "Don't support blob response type");
             } else {
                 SE_PRECONDITION2(false, false, "Invalid response type");
             }
@@ -976,7 +958,14 @@ static bool XMLHttpRequest_getWithCredentials(se::State & /*s*/) { //NOLINT(read
 SE_BIND_PROP_GET(XMLHttpRequest_getWithCredentials)
 
 bool register_all_xmlhttprequest(se::Object *global) { //NOLINT(readability-identifier-naming)
-    se::Class *cls = se::Class::create("XMLHttpRequest", global, nullptr, _SE(XMLHttpRequest_constructor));
+    se::Value nsVal;
+    if (!global->getProperty("jsb", &nsVal, true)) {
+        se::HandleObject jsobj(se::Object::createPlainObject());
+        nsVal.setObject(jsobj);
+        global->setProperty("jsb", nsVal);
+    }
+    se::Object *ns = nsVal.toObject();
+    se::Class *cls = se::Class::create("XMLHttpRequest", ns, nullptr, _SE(XMLHttpRequest_constructor));
     cls->defineFinalizeFunction(_SE(XMLHttpRequest_finalize));
 
     cls->defineFunction("open", _SE(XMLHttpRequest_open));

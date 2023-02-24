@@ -1,19 +1,18 @@
 /* eslint-disable max-len */
 /*
- Copyright (c) 2020-2022 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2020-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -22,7 +21,7 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- */
+*/
 
 import spine from '../lib/spine-core.js';
 import { IAssembler } from '../../2d/renderer/base';
@@ -32,12 +31,13 @@ import { MaterialInstance } from '../../render-scene';
 import { SkeletonTexture } from '../skeleton-texture';
 import { getAttributeStride, vfmtPosUvColor4B, vfmtPosUvTwoColor4B } from '../../2d/renderer/vertex-format';
 import { Skeleton, SpineMaterialType } from '../skeleton';
-import { Color, director } from '../../core';
+import { Color, Mat4, Vec3 } from '../../core';
 import { BlendFactor } from '../../gfx';
 import { legacyCC } from '../../core/global-exports';
 import { StaticVBAccessor } from '../../2d/renderer/static-vb-accessor';
 import { RenderData } from '../../2d/renderer/render-data';
 import { Texture2D } from '../../../typedoc-index.js';
+import { director } from '../../game';
 
 const _quadTriangles = [0, 1, 2, 2, 3, 0];
 const _slotColor = new Color(0, 0, 255, 255);
@@ -80,6 +80,7 @@ let _tempg: number;
 let _tempb: number;
 let _inRange: boolean;
 let _mustFlush: boolean;
+const _tempVecPos = new Vec3(0, 0, 0);
 let _r: number;
 let _g: number;
 let _b: number;
@@ -100,7 +101,6 @@ let _needColor: boolean;
 let _vertexEffect: spine.VertexEffect | null = null;
 let _currentMaterial: MaterialInstance | null = null;
 let _currentTexture: Texture2D | null = null;
-const _inv255 = 1.0 / 255.0;
 
 function _getSlotMaterial (blendMode: spine.BlendMode) {
     let src: BlendFactor;
@@ -273,13 +273,16 @@ function updateComponentRenderData (comp: Skeleton, batcher: Batcher2D) {
     if (nodeColor._val !== 0xffffffff ||  _premultipliedAlpha) {
         _needColor = true;
     }
-
+    let nodeMat: Mat4 | null = null;
+    if (comp.enableBatch) {
+        nodeMat = comp.node.worldMatrix;
+    }
     if (comp.isAnimationCached()) {
         // Traverse input assembler.
-        cacheTraverse();
+        cacheTraverse(nodeMat);
     } else {
         if (_vertexEffect) _vertexEffect.begin(comp._skeleton);
-        realTimeTraverse(batcher);
+        realTimeTraverse(nodeMat);
         if (_vertexEffect) _vertexEffect.end();
     }
     // Ensure mesh buffer update
@@ -493,7 +496,7 @@ function fillVertices (skeletonColor: spine.Color,
     }
 }
 
-function realTimeTraverse (batcher: Batcher2D) {
+function realTimeTraverse (worldMat: Mat4 | null) {
     const rd = _renderData!;
     _vbuf = rd.chunk.vb;
     _vUintBuf = new Uint32Array(_vbuf.buffer, _vbuf.byteOffset, _vbuf.length);
@@ -677,6 +680,17 @@ function realTimeTraverse (batcher: Batcher2D) {
             for (let ii = _indexOffset, nn = _indexOffset + _indexCount; ii < nn; ii++) {
                 _ibuf[ii] += _vertexOffset + chunkOffset;
             }
+            if (worldMat) {
+                for (let ii = _vertexFloatOffset, nn = _vertexFloatOffset + _vertexFloatCount; ii < nn; ii += _perVertexSize) {
+                    _tempVecPos.x = _vbuf[ii];
+                    _tempVecPos.y = _vbuf[ii + 1];
+                    _tempVecPos.z = 0;
+                    _tempVecPos.transformMat4(worldMat);
+                    _vbuf[ii] = _tempVecPos.x;
+                    _vbuf[ii + 1] = _tempVecPos.y;
+                    _vbuf[ii + 2] = _tempVecPos.z;
+                }
+            }
         }
         _vertexFloatOffset += _vertexFloatCount;
         _vertexOffset += _vertexCount;
@@ -719,7 +733,7 @@ function realTimeTraverse (batcher: Batcher2D) {
     }
 }
 
-function cacheTraverse () {
+function cacheTraverse (worldMat: Mat4 | null) {
     const frame = _comp!._curFrame;
     if (!frame) return;
 
@@ -750,6 +764,7 @@ function cacheTraverse () {
     let prevDrawIndexOffset = 0;
     const rd = _renderData!;
     const vbuf = rd.chunk.vb;
+    _vUintBuf = new Uint32Array(vbuf.buffer, vbuf.byteOffset, vbuf.length);
     const ibuf = rd.indices!;
     for (let i = 0, n = segments.length; i < n; i++) {
         const segInfo = segments[i];
@@ -781,11 +796,22 @@ function cacheTraverse () {
         // Fill vertices
         segVFCount = segInfo.vfCount;
         vbuf.set(vertices.subarray(frameVFOffset, frameVFOffset + segVFCount), frameVFOffset);
+        if (worldMat) {
+            for (let ii = frameVFOffset, il = frameVFOffset + segVFCount; ii < il; ii += _perVertexSize) {
+                _tempVecPos.x = vbuf[ii];
+                _tempVecPos.y = vbuf[ii + 1];
+                _tempVecPos.z = 0;
+                _tempVecPos.transformMat4(worldMat);
+                vbuf[ii] = _tempVecPos.x;
+                vbuf[ii + 1] = _tempVecPos.y;
+                vbuf[ii + 2] = _tempVecPos.z;
+            }
+        }
 
         // Update color
         if (_needColor) {
             // handle color
-            // tip: step of frameColorOffset should fix with vertex attributes, (xyzuvrgbargba--xyuvcc)
+            // tip: step of frameColorOffset should fix with vertex attributes, (xyzuvrcc--xyuvcc)
             let frameColorOffset = frameVFOffset / 7 * 6;
             for (let ii = frameVFOffset, iEnd = frameVFOffset + segVFCount; ii < iEnd; ii += _perVertexSize, frameColorOffset += 6) {
                 if (frameColorOffset >= maxVFOffset) {

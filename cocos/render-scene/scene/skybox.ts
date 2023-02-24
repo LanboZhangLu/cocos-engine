@@ -1,18 +1,17 @@
 /*
- Copyright (c) 2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2020-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -21,21 +20,20 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- */
+*/
 
 import { builtinResMgr } from '../../asset/asset-manager/builtin-res-mgr';
 import { Material } from '../../asset/assets/material';
 import { Mesh } from '../../3d/assets/mesh';
 import { TextureCube } from '../../asset/assets/texture-cube';
-import { UNIFORM_ENVIRONMENT_BINDING, UNIFORM_DIFFUSEMAP_BINDING } from '../../core/pipeline/define';
+import { UNIFORM_ENVIRONMENT_BINDING, UNIFORM_DIFFUSEMAP_BINDING } from '../../rendering/define';
 import { MaterialInstance } from '../core/material-instance';
 import { Model } from './model';
-import { legacyCC } from '../../core/global-exports';
-import type { SkyboxInfo } from '../../core/scene-graph/scene-globals';
-import { Root } from '../../core/root';
-import { GlobalDSManager } from '../../core/pipeline/global-descriptor-set-manager';
+import type { SkyboxInfo } from '../../scene-graph/scene-globals';
+import { Root } from '../../root';
+import { GlobalDSManager } from '../../rendering/global-descriptor-set-manager';
 import { deviceManager } from '../../gfx';
-import { Enum } from '../../core/value-types';
+import { Enum, cclegacy } from '../../core';
 
 let skybox_mesh: Mesh | null = null;
 let skybox_material: Material | null = null;
@@ -164,7 +162,7 @@ export class Skybox {
      * @zh 使用的立方体贴图
      */
     get envmap (): TextureCube | null {
-        const isHDR = (legacyCC.director.root as Root).pipeline.pipelineSceneData.isHDR;
+        const isHDR = (cclegacy.director.root as Root).pipeline.pipelineSceneData.isHDR;
         if (isHDR) {
             return this._envmapHDR;
         } else {
@@ -172,7 +170,7 @@ export class Skybox {
         }
     }
     set envmap (val: TextureCube | null) {
-        const root = legacyCC.director.root as Root;
+        const root = cclegacy.director.root as Root;
         const isHDR = root.pipeline.pipelineSceneData.isHDR;
         if (isHDR) {
             this.setEnvMaps(val, this._envmapLDR);
@@ -186,7 +184,7 @@ export class Skybox {
      * @zh 使用的漫反射卷积图
      */
     get diffuseMap (): TextureCube | null {
-        const isHDR = (legacyCC.director.root as Root).pipeline.pipelineSceneData.isHDR;
+        const isHDR = (cclegacy.director.root as Root).pipeline.pipelineSceneData.isHDR;
         if (isHDR) {
             return this._diffuseMapHDR;
         } else {
@@ -194,7 +192,7 @@ export class Skybox {
         }
     }
     set diffuseMap (val: TextureCube | null) {
-        const isHDR = (legacyCC.director.root as Root).pipeline.pipelineSceneData.isHDR;
+        const isHDR = (cclegacy.director.root as Root).pipeline.pipelineSceneData.isHDR;
         if (isHDR) {
             this.setDiffuseMaps(val, this._diffuseMapLDR);
         } else {
@@ -203,7 +201,7 @@ export class Skybox {
     }
 
     get reflectionMap (): TextureCube | null {
-        const isHDR = (legacyCC.director.root as Root).pipeline.pipelineSceneData.isHDR;
+        const isHDR = (cclegacy.director.root as Root).pipeline.pipelineSceneData.isHDR;
         if (isHDR) {
             return this._reflectionHDR;
         } else {
@@ -310,12 +308,12 @@ export class Skybox {
     }
 
     public activate () {
-        const pipeline = legacyCC.director.root.pipeline;
+        const pipeline = cclegacy.director.root.pipeline;
         this._globalDSManager = pipeline.globalDSManager;
         this._default = builtinResMgr.get<TextureCube>('default-cube-texture');
 
         if (!this._model) {
-            this._model = legacyCC.director.root.createModel(legacyCC.renderer.scene.Model) as Model;
+            this._model = cclegacy.director.root.createModel(cclegacy.renderer.scene.Model) as Model;
             //The skybox material has added properties of 'environmentMap' that need local ubo
             //this._model._initLocalDescriptors = () => {};
             //this._model._initWorldBoundDescriptors = () => {};
@@ -335,7 +333,7 @@ export class Skybox {
 
         if (this.enabled) {
             if (!skybox_mesh) {
-                skybox_mesh = legacyCC.utils.createMesh(legacyCC.primitives.box({ width: 2, height: 2, length: 2 })) as Mesh;
+                skybox_mesh = cclegacy.utils.createMesh(cclegacy.primitives.box({ width: 2, height: 2, length: 2 })) as Mesh;
             }
             if (this._editableMaterial) {
                 this._model.initSubModel(0, skybox_mesh.renderingSubMeshes[0], this._editableMaterial);
@@ -359,7 +357,7 @@ export class Skybox {
     }
 
     protected _updatePipeline () {
-        const root = legacyCC.director.root as Root;
+        const root = cclegacy.director.root as Root;
         const pipeline = root.pipeline;
 
         const useIBLValue = this.useIBL ? (this.isRGBE ? 2 : 1) : 0;
@@ -435,4 +433,4 @@ export class Skybox {
     }
 }
 
-legacyCC.Skybox = Skybox;
+cclegacy.Skybox = Skybox;

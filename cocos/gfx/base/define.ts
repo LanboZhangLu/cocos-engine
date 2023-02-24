@@ -1,18 +1,17 @@
 /*
- Copyright (c) 2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2020-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -21,7 +20,7 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- */
+*/
 
 import { Queue } from './queue';
 import { Buffer } from './buffer';
@@ -34,7 +33,7 @@ import { Sampler } from './states/sampler';
 import { GeneralBarrier } from './states/general-barrier';
 import { TextureBarrier } from './states/texture-barrier';
 import { BufferBarrier } from './states/buffer-barrier';
-import { GCObject } from '../../core/data/gc-object';
+import { GCObject } from '../../core';
 
 interface ICopyable { copy (info: ICopyable): ICopyable; }
 
@@ -736,6 +735,8 @@ export class DeviceCaps {
         public maxUniformBlockSize: number = 0,
         public maxTextureSize: number = 0,
         public maxCubeMapTextureSize: number = 0,
+        public maxArrayTextureLayers: number = 0,
+        public max3DTextureSize: number = 0,
         public uboOffsetAlignment: number = 1,
         public maxComputeSharedMemorySize: number = 0,
         public maxComputeWorkGroupInvocations: number = 0,
@@ -761,6 +762,8 @@ export class DeviceCaps {
         this.maxUniformBlockSize = info.maxUniformBlockSize;
         this.maxTextureSize = info.maxTextureSize;
         this.maxCubeMapTextureSize = info.maxCubeMapTextureSize;
+        this.maxArrayTextureLayers = info.maxArrayTextureLayers;
+        this.max3DTextureSize = info.max3DTextureSize;
         this.uboOffsetAlignment = info.uboOffsetAlignment;
         this.maxComputeSharedMemorySize = info.maxComputeSharedMemorySize;
         this.maxComputeWorkGroupInvocations = info.maxComputeWorkGroupInvocations;
@@ -1012,35 +1015,11 @@ export class BindingMappingInfo {
     }
 }
 
-export class SystemWindowInfo {
-    declare private _token: never; // to make sure all usages must be an instance of this exact class, not assembled from plain object
-
-    constructor (
-        public title: string = null!,
-        public x: number = 0,
-        public y: number = 0,
-        public width: number = 0,
-        public height: number = 0,
-        public flags: number = 0,
-        public windowHandle: HTMLCanvasElement = null!,
-    ) {}
-
-    public copy (info: Readonly<SystemWindowInfo>) {
-        this.title = info.title;
-        this.x = info.x;
-        this.y = info.y;
-        this.width = info.width;
-        this.height = info.height;
-        this.flags = info.flags;
-        this.windowHandle = info.windowHandle;
-        return this;
-    }
-}
-
 export class SwapchainInfo {
     declare private _token: never; // to make sure all usages must be an instance of this exact class, not assembled from plain object
 
     constructor (
+        public windowId: number = 0,
         public windowHandle: HTMLCanvasElement = null!,
         public vsyncMode: VsyncMode = VsyncMode.ON,
         public width: number = 0,
@@ -1048,6 +1027,7 @@ export class SwapchainInfo {
     ) {}
 
     public copy (info: Readonly<SwapchainInfo>) {
+        this.windowId = info.windowId;
         this.windowHandle = info.windowHandle;
         this.vsyncMode = info.vsyncMode;
         this.width = info.width;
@@ -1277,6 +1257,7 @@ export class UniformBlock {
         public name: string = '',
         public members: Uniform[] = [],
         public count: number = 0,
+        public flattened: number = 0,
     ) {}
 
     public copy (info: Readonly<UniformBlock>) {
@@ -1285,6 +1266,7 @@ export class UniformBlock {
         this.name = info.name;
         deepCopy(this.members, info.members, Uniform);
         this.count = info.count;
+        this.flattened = info.flattened;
         return this;
     }
 }
@@ -1298,6 +1280,7 @@ export class UniformSamplerTexture {
         public name: string = '',
         public type: Type = Type.UNKNOWN,
         public count: number = 0,
+        public flattened: number = 0,
     ) {}
 
     public copy (info: Readonly<UniformSamplerTexture>) {
@@ -1306,6 +1289,7 @@ export class UniformSamplerTexture {
         this.name = info.name;
         this.type = info.type;
         this.count = info.count;
+        this.flattened = info.flattened;
         return this;
     }
 }
@@ -1318,6 +1302,7 @@ export class UniformSampler {
         public binding: number = 0,
         public name: string = '',
         public count: number = 0,
+        public flattened: number = 0,
     ) {}
 
     public copy (info: Readonly<UniformSampler>) {
@@ -1325,6 +1310,7 @@ export class UniformSampler {
         this.binding = info.binding;
         this.name = info.name;
         this.count = info.count;
+        this.flattened = info.flattened;
         return this;
     }
 }
@@ -1338,6 +1324,7 @@ export class UniformTexture {
         public name: string = '',
         public type: Type = Type.UNKNOWN,
         public count: number = 0,
+        public flattened: number = 0,
     ) {}
 
     public copy (info: Readonly<UniformTexture>) {
@@ -1346,6 +1333,7 @@ export class UniformTexture {
         this.name = info.name;
         this.type = info.type;
         this.count = info.count;
+        this.flattened = info.flattened;
         return this;
     }
 }
@@ -1360,6 +1348,7 @@ export class UniformStorageImage {
         public type: Type = Type.UNKNOWN,
         public count: number = 0,
         public memoryAccess: MemoryAccess = MemoryAccessBit.READ_WRITE,
+        public flattened: number = 0,
     ) {}
 
     public copy (info: Readonly<UniformStorageImage>) {
@@ -1369,6 +1358,7 @@ export class UniformStorageImage {
         this.type = info.type;
         this.count = info.count;
         this.memoryAccess = info.memoryAccess;
+        this.flattened = info.flattened;
         return this;
     }
 }
@@ -1382,6 +1372,7 @@ export class UniformStorageBuffer {
         public name: string = '',
         public count: number = 0,
         public memoryAccess: MemoryAccess = MemoryAccessBit.READ_WRITE,
+        public flattened: number = 0,
     ) {}
 
     public copy (info: Readonly<UniformStorageBuffer>) {
@@ -1390,6 +1381,7 @@ export class UniformStorageBuffer {
         this.name = info.name;
         this.count = info.count;
         this.memoryAccess = info.memoryAccess;
+        this.flattened = info.flattened;
         return this;
     }
 }
@@ -1402,6 +1394,7 @@ export class UniformInputAttachment {
         public binding: number = 0,
         public name: string = '',
         public count: number = 0,
+        public flattened: number = 0,
     ) {}
 
     public copy (info: Readonly<UniformInputAttachment>) {
@@ -1409,6 +1402,7 @@ export class UniformInputAttachment {
         this.binding = info.binding;
         this.name = info.name;
         this.count = info.count;
+        this.flattened = info.flattened;
         return this;
     }
 }

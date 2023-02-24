@@ -1,18 +1,17 @@
 /****************************************************************************
- Copyright (c) 2021-2022 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2021-2023 Xiamen Yaji Software Co., Ltd.
 
  http://www.cocos.com
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -37,6 +36,12 @@
 namespace cc {
 namespace scene {
 class Pass;
+struct InstancedAttributeBlock {
+    Uint8Array buffer;
+    ccstd::vector<TypedArray> views;
+    ccstd::vector<gfx::Attribute> attributes;
+};
+
 class SubModel : public RefCounted {
 public:
     SubModel();
@@ -57,6 +62,9 @@ public:
     inline void setPriority(pipeline::RenderPriority priority) { _priority = priority; }
     inline void setOwner(Model *model) { _owner = model; }
     void setSubMesh(RenderingSubMesh *subMesh);
+    inline void setInstancedWorldMatrixIndex(int32_t worldMatrixIndex) { _instancedWorldMatrixIndex = worldMatrixIndex; }
+    inline void setInstancedSHIndex(int32_t index) { _instancedSHIndex = index; }
+    void setInstancedAttribute(const ccstd::string &name, const float *value, uint32_t byteLength);
 
     inline gfx::DescriptorSet *getDescriptorSet() const { return _descriptorSet; }
     inline gfx::DescriptorSet *getWorldBoundDescriptorSet() const { return _worldBoundDescriptorSet; }
@@ -70,6 +78,10 @@ public:
     inline RenderingSubMesh *getSubMesh() const { return _subMesh; }
     inline Model *getOwner() const { return _owner; }
     inline uint32_t getId() const { return _id; }
+    inline InstancedAttributeBlock &getInstancedAttributeBlock() { return _instancedAttributeBlock; }
+    inline int32_t getInstancedWorldMatrixIndex() const { return _instancedWorldMatrixIndex; }
+    inline int32_t getInstancedSHIndex() const { return _instancedSHIndex; }
+    int32_t getInstancedAttributeIndex(const ccstd::string &name) const;
 
     void initialize(RenderingSubMesh *subMesh, const std::shared_ptr<ccstd::vector<IntrusivePtr<Pass>>> &passes, const ccstd::vector<IMacroPatch> &patches);
     void initPlanarShadowShader();
@@ -78,26 +90,41 @@ public:
     void onPipelineStateChanged();
     void onMacroPatchesStateChanged(const ccstd::vector<IMacroPatch> &patches);
     void onGeometryChanged();
+    void updateInstancedAttributes(const ccstd::vector<gfx::Attribute> &attributes);
+    void updateInstancedWorldMatrix(const Mat4 &mat, int32_t idx);
+    void updateInstancedSH(const Float32Array &data, int32_t idx);
+    inline int32_t getReflectionProbeType() const { return _reflectionProbeType; }
+    void setReflectionProbeType(int32_t val) { _reflectionProbeType = val; }
 
 protected:
     void flushPassInfo();
 
+    pipeline::RenderPriority _priority{pipeline::RenderPriority::DEFAULT};
+
+    int32_t _id{-1};
+    int32_t _instancedWorldMatrixIndex{-1};
+    int32_t _instancedSHIndex{-1};
+
     gfx::Device *_device{nullptr};
-    ccstd::vector<IMacroPatch> _patches;
+    Model *_owner{nullptr};
+    gfx::Sampler *_reflectionSampler{nullptr};
+
     IntrusivePtr<gfx::InputAssembler> _inputAssembler;
     IntrusivePtr<gfx::DescriptorSet> _descriptorSet;
     IntrusivePtr<gfx::DescriptorSet> _worldBoundDescriptorSet;
-
     IntrusivePtr<gfx::Texture> _reflectionTex;
-    gfx::Sampler *_reflectionSampler{nullptr};
-    pipeline::RenderPriority _priority{pipeline::RenderPriority::DEFAULT};
     IntrusivePtr<gfx::Shader> _planarShader;
     IntrusivePtr<gfx::Shader> _planarInstanceShader;
     IntrusivePtr<RenderingSubMesh> _subMesh;
-    std::shared_ptr<ccstd::vector<IntrusivePtr<Pass>>> _passes;
+
+    InstancedAttributeBlock _instancedAttributeBlock{};
+
+    ccstd::vector<IMacroPatch> _patches;
     ccstd::vector<IntrusivePtr<gfx::Shader>> _shaders;
-    Model *_owner{nullptr};
-    int32_t _id{-1};
+
+    std::shared_ptr<ccstd::vector<IntrusivePtr<Pass>>> _passes;
+
+    int32_t _reflectionProbeType{0};
 
 private:
     static inline int32_t generateId() {

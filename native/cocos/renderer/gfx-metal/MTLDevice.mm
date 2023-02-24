@@ -43,8 +43,6 @@
 #import "MTLSwapchain.h"
 #import "MTLTexture.h"
 #import "base/Log.h"
-#import "cocos/bindings/event/CustomEventTypes.h"
-#import "cocos/bindings/event/EventDispatcher.h"
 #import "profiler/Profiler.h"
 
 
@@ -75,13 +73,22 @@ CCMTLDevice::~CCMTLDevice() {
 
 bool CCMTLDevice::doInit(const DeviceInfo &info) {
     _gpuDeviceObj = ccnew CCMTLGPUDeviceObject;
+    
     _inFlightSemaphore = ccnew CCMTLSemaphore(3);
     _currentFrameIndex = 0;
 
     id<MTLDevice> mtlDevice = MTLCreateSystemDefaultDevice();
     _mtlDevice = mtlDevice;
 
+    NSString *deviceName = [mtlDevice name];
+    _renderer = [deviceName UTF8String];
+    NSArray* nameArr = [deviceName componentsSeparatedByString:@" "];
+    if ([nameArr count] > 0) {
+        _vendor = [nameArr[0] UTF8String];
+    }
     _mtlFeatureSet = mu::highestSupportedFeatureSet(mtlDevice);
+    _version = std::to_string(_mtlFeatureSet);
+    
     const auto gpuFamily = mu::getGPUFamily(MTLFeatureSet(_mtlFeatureSet));
     _indirectDrawSupported = mu::isIndirectDrawSupported(gpuFamily);
     _caps.maxVertexAttributes = mu::getMaxVertexAttributes(gpuFamily);
@@ -136,13 +143,16 @@ bool CCMTLDevice::doInit(const DeviceInfo &info) {
 
     QueryPoolInfo queryPoolInfo{QueryType::OCCLUSION, DEFAULT_MAX_QUERY_OBJECTS, true};
     _queryPool = createQueryPool(queryPoolInfo);
+    
+    CommandBufferInfo transferCmdBuffInfo;
+    transferCmdBuffInfo.type = CommandBufferType::PRIMARY;
+    transferCmdBuffInfo.queue = _queue;
+    _gpuDeviceObj->_transferCmdBuffer = static_cast<CCMTLCommandBuffer*>(createCommandBuffer(transferCmdBuffInfo));
 
     CommandBufferInfo cmdBuffInfo;
     cmdBuffInfo.type = CommandBufferType::PRIMARY;
     cmdBuffInfo.queue = _queue;
     _cmdBuff = createCommandBuffer(cmdBuffInfo);
-
-    //    _memoryAlarmListenerId = EventDispatcher::addCustomEventListener(EVENT_MEMORY_WARNING, std::bind(&CCMTLDevice::onMemoryWarning, this));
 
     CCMTLGPUGarbageCollectionPool::getInstance()->initialize(std::bind(&CCMTLDevice::currentFrameIndex, this));
 
@@ -152,11 +162,8 @@ bool CCMTLDevice::doInit(const DeviceInfo &info) {
 }
 
 void CCMTLDevice::doDestroy() {
-    //    if (_memoryAlarmListenerId != 0) {
-    //        EventDispatcher::removeCustomEventListener(EVENT_MEMORY_WARNING, _memoryAlarmListenerId);
-    //        _memoryAlarmListenerId = 0;
-    //    }
 
+    CC_SAFE_DESTROY_AND_DELETE(_gpuDeviceObj->_transferCmdBuffer);
     CC_SAFE_DELETE(_gpuDeviceObj);
 
     CC_SAFE_DESTROY_AND_DELETE(_queryPool)
@@ -175,6 +182,7 @@ void CCMTLDevice::doDestroy() {
         CC_SAFE_DELETE(_gpuStagingBufferPools[i]);
         _gpuStagingBufferPools[i] = nullptr;
     }
+    _inFlightCount = 0;
 
     cc::gfx::mu::clearUtilResource();
 
@@ -224,6 +232,7 @@ void CCMTLDevice::present() {
 
     // present drawable
     {
+        ++_inFlightCount;
         id<MTLCommandBuffer> cmdBuffer = [queue->gpuQueueObj()->mtlCommandQueue commandBuffer];
         [cmdBuffer enqueue];
 
@@ -247,6 +256,7 @@ void CCMTLDevice::onPresentCompleted(uint32_t index) {
         }
     }
     _inFlightSemaphore->signal();
+    --_inFlightCount;
 }
 
 Queue *CCMTLDevice::createQueue() {
@@ -324,6 +334,32 @@ void CCMTLDevice::copyTextureToBuffers(Texture *src, uint8_t *const *buffers, co
     static_cast<CCMTLCommandBuffer *>(_cmdBuff)->copyTextureToBuffers(src, buffers, region, count);
 }
 
+void CCMTLDevice::writeBuffer(Buffer* buffer, const void* data, uint32_t size) {
+    bool hasFrameInFlight = _inFlightCount;
+    auto* ccBuffer = static_cast<CCMTLBuffer*>(buffer);
+    id<MTLBuffer> mtlBuffer = ccBuffer->getMTLBuffer();
+    if(!hasFrameInFlight && mtlBuffer.storageMode != MTLStorageModePrivate) {
+        if(@available(macOS 10.15, *)) {
+            memcpy(mtlBuffer.contents, data, size);
+#if (CC_PLATFORM == CC_PLATFORM_MACOS)
+            if (mtlBuffer.storageMode == MTLStorageModeManaged) {
+                [mtlBuffer didModifyRange:NSMakeRange(0, size)]; // Synchronize the managed buffer.
+            }
+#endif
+        }
+        if(@available(iOS 11.0, *)) {
+            memcpy(mtlBuffer.contents, data, size);
+        }
+    } else {
+        CCMTLCommandBuffer* transferCmdBuffer = _gpuDeviceObj->_transferCmdBuffer;
+        transferCmdBuffer->updateBuffer(buffer, data, size);
+    }
+}
+
+CommandBuffer* CCMTLDevice::transferCommandBuffer() const {
+    return _gpuDeviceObj ? _gpuDeviceObj->_transferCmdBuffer : nullptr;
+}
+
 void CCMTLDevice::getQueryPoolResults(QueryPool *queryPool) {
     CC_PROFILE(CCMTLDeviceGetQueryPoolResults);
     auto *mtlQueryPool = static_cast<CCMTLQueryPool *>(queryPool);
@@ -392,7 +428,7 @@ void CCMTLDevice::initFormatFeatures(uint32_t gpuFamily) {
     }
 
     tempFeature = FormatFeature::RENDER_TARGET | FormatFeature::SAMPLED_TEXTURE | FormatFeature::LINEAR_FILTER | FormatFeature::STORAGE_TEXTURE;
-
+    _formatFeatures[toNumber(Format::BGRA8)] = tempFeature;
     _formatFeatures[toNumber(Format::R8SN)] = tempFeature;
     _formatFeatures[toNumber(Format::RG8SN)] = tempFeature;
     _formatFeatures[toNumber(Format::RGBA8SN)] = tempFeature;

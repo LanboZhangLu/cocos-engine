@@ -1,18 +1,17 @@
 /****************************************************************************
- Copyright (c) 2022 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2022-2023 Xiamen Yaji Software Co., Ltd.
 
  http://www.cocos.com
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -29,6 +28,10 @@
 #include <functional>
 #include <vector>
 #include "XRCommon.h"
+
+#ifndef XR_USE_GRAPHICS_API_OPENGL_ES
+    #define XR_USE_GRAPHICS_API_OPENGL_ES 1
+#endif
 
 #ifdef XR_USE_GRAPHICS_API_VULKAN
     #include "vulkan/vulkan_core.h"
@@ -75,6 +78,8 @@ public:
 #ifdef XR_USE_GRAPHICS_API_OPENGL_ES
     virtual void initXrSession(PFNGLES3WLOADPROC gles3wLoadFuncProc, void *eglDisplay, void *eglConfig, void *eglDefaultContext) = 0;
 
+    virtual void setXrFrameBuffer(unsigned int fbo) = 0;
+
     virtual unsigned int getXrFrameBuffer() = 0;
 
     virtual void attachXrFramebufferTexture2D() = 0;
@@ -107,6 +112,8 @@ public:
     virtual void setXRConfigCallback(const cc::xr::XRConfigChangeCallback &xrConfigChangeCallback) = 0;
 
     virtual std::vector<float> computeViewProjection(uint32_t index, float nearZ, float farZ, float scaleF) = 0;
+
+    virtual std::vector<float> getEyeFov(uint32_t eye) = 0;
 
     virtual uint32_t getSwapchainImageIndex() = 0;
 
@@ -149,6 +156,11 @@ public:
     virtual std::string getXRStringConfig(int key) = 0;
 
     virtual void *getXRPointerConfig(int key) = 0;
+
+    virtual void getXrPose(cc::xr::XRPose &leftEyePose,
+                           cc::xr::XRPose &rightEyePose,
+                           cc::xr::XRPose &leftControllerPose,
+                           cc::xr::XRPose &rightControllerPose) = 0;
 };
 
 } // namespace xr

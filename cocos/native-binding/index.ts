@@ -1,7 +1,30 @@
+/*
+ Copyright (c) 2022-2023 Xiamen Yaji Software Co., Ltd.
+
+ https://www.cocos.com/
+
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
+
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
+
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ THE SOFTWARE.
+*/
+
 /* eslint-disable @typescript-eslint/no-namespace */
 
-import type { Color } from '../core/math/color';
-import type { Vec2 } from '../core/math/vec2';
+import type { Color, Vec2 } from '../core';
 
 // @ts-expect-error this is a virtual module
 export * from 'internal:native';
@@ -424,7 +447,9 @@ export declare namespace native {
         /**
          * @en create a download task. The maximum size for a single download file is 4GB.
          * @zh 创建一个下载任务. 单个下载文件最大为4GB.
-         * @param requestURL @en Request download resource URL  @zh 请求下载资源的URL
+         * @param requestURL
+         * @en Request download resource URL. Node: Users need to encode the URL containing special characters except spaces (such as Chinese, etc.)
+         * @zh 请求下载资源的URL. 注意: 当URL中包含除空格外特殊字符(如:中文等)时需要用户自行编码后传入.
          * @param storagePath @en Storage path for downloaded file @zh 下载文件存储路径
          * @param identifier  @en identifier @zh 标识符
          * @return @en DownloadTask @zh 下载任务对象
@@ -487,7 +512,9 @@ export declare namespace native {
          * @deprecated since v3.6.0, please use `createDownloadTask` to instead.
          * @en create a download task. The maximum size for a single download file is 4GB.
          * @zh 创建一个下载任务. 单个下载文件最大为4GB.
-         * @param requestURL @en Request download resource URL  @zh 请求下载资源的URL
+         * @param requestURL
+         * @en Request download resource URL. Node: Users need to encode the URL containing special characters except spaces (such as Chinese, etc.)
+         * @zh 请求下载资源的URL. 注意: 当URL中包含除空格外特殊字符(如:中文等)时需要用户自行编码后传入.
          * @param storagePath @en Storage path for downloaded file @zh 下载文件存储路径
          * @param identifier  @en identifier @zh 标识符
          * @return @en DownloadTask @zh 下载任务对象
@@ -1363,4 +1390,16 @@ export declare namespace native {
         });
      */
     export function saveImageData(data: Uint8Array, width: number, height: number, filePath: string): Promise<void>;
+
+    /**
+     * @en Current process information
+     * @zh 当前进程信息
+     */
+    export namespace process {
+        /**
+         * @en Get argument list passed to execution file
+         * @zh 获取当前传递给执行文件的参数列表
+         */
+        export const argv: Readonly<string[]>;
+    }
 }

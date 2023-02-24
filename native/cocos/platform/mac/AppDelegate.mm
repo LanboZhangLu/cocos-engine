@@ -27,7 +27,7 @@
 #include "base/std/container/string.h"
 //#import "Game.h"
 #import "ViewController.h"
-#include "cocos/bindings/event/EventDispatcher.h"
+#include "engine/EngineEvents.h"
 #include "platform/mac/MacPlatform.h"
 
 @interface AppDelegate () {
@@ -84,7 +84,7 @@
 
 - (void)applicationDidFinishLaunching:(NSNotification*)aNotification {
     _platform = dynamic_cast<cc::MacPlatform*>(cc::BasePlatform::getPlatform());
-    CC_ASSERT(_platform != nullptr);
+    CC_ASSERT_NOT_NULL(_platform);
     _platform->loop();
 }
 
@@ -104,6 +104,11 @@
     return _window;
 }
 
+- (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication *)sender
+{
+    return _platform->readyToExit() ? NSTerminateNow : NSTerminateLater;
+}
+
 - (void)applicationWillTerminate:(NSNotification*)aNotification {
     //    delete _game;
     //FIXME: will crash if relase it here.
@@ -113,10 +118,6 @@
 
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication*)theApplication {
     return YES;
-}
-
-- (void)dispatchEvent:(const cc::OSEvent&)ev {
-    _platform->dispatchEvent(ev);
 }
 
 @end

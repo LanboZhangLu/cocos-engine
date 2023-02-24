@@ -1,18 +1,17 @@
 /****************************************************************************
- Copyright (c) 2022 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2022-2023 Xiamen Yaji Software Co., Ltd.
 
  http://www.cocos.com
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -51,12 +50,21 @@
 
 namespace {
 
-    #define AUTO_TEST_CONFIG_FILE "auto-test-config.json"
-    #define ATC_KEY_CONFIG        "ServerConfig"
-    #define ATC_KEY_IP            "IP"
-    #define ATC_KEY_PORT          "PORT"
-    #define ATC_KEY_PLANID        "planId"
-    #define ATC_KEY_FLAGID        "flagId"
+    // #define AUTO_TEST_CONFIG_FILE "auto-test-config.json" // v1
+    #define AUTO_TEST_CONFIG_FILE "testConfig.json" // v2
+
+    #define OLD_ATC_KEY_CONFIG "ServerConfig"
+    #define OLD_ATC_KEY_IP     "IP"
+    #define OLD_ATC_KEY_PORT   "PORT"
+    #define OLD_ATC_KEY_PLANID "planId"
+    #define OLD_ATC_KEY_FLAGID "flagId"
+
+    #define ATC_KEY_CONFIG         "localServer"
+    #define ATC_KEY_IP             "ip"
+    #define ATC_KEY_PORT           "port"
+    #define ATC_KEY_JOBID          "jobId"
+    #define ATC_KEY_PLATFORMS      "platforms"
+    #define ATC_KEY_PLATFORM_INDEX "platformIndex"
 
 enum class UdpLogClientState {
     UNINITIALIZED,
@@ -65,13 +73,16 @@ enum class UdpLogClientState {
     OK,
     DONE, // FAILED
 };
+
+uint64_t logId = 0;
+
 /**
 * Parse auto-test-config.json to get ServerConfig.IP & ServerConfig.PORT
 * Logs will be formated with 5 fields
 * 1. testId
 * 2. clientId
 * 3. bootId,  the boot timestamp
-* 4. milliseconds since boot
+* 4. sequence number of the message
 * 5. log content
 *
 * These parts are joined with '\n'.
@@ -94,14 +105,11 @@ public:
         if (_status == UdpLogClientState::DONE) {
             return;
         }
-        auto timeNow = std::chrono::duration_cast<std::chrono::milliseconds>(
-                           std::chrono::system_clock::now().time_since_epoch())
-                           .count();
         std::stringstream ss;
         ss << _testID << std::endl
            << _clientID << std::endl
            << _bootID << std::endl
-           << (timeNow - _bootID) << std::endl
+           << ++logId << std::endl
            << msg;
         sendLog(ss.str());
     }
@@ -155,26 +163,53 @@ private:
             return;
         }
 
-        if (!doc.HasMember(ATC_KEY_CONFIG)) {
-            _status = UdpLogClientState::DONE;
-            return;
-        }
-        {
+        if (doc.HasMember(OLD_ATC_KEY_CONFIG)) {
             // parse clientID & testID
-            if (doc.HasMember(ATC_KEY_FLAGID)) {
-                _clientID = doc[ATC_KEY_FLAGID].GetString();
+            if (doc.HasMember(OLD_ATC_KEY_FLAGID)) {
+                _clientID = doc[OLD_ATC_KEY_FLAGID].GetString();
             } else {
                 _clientID = "flagId is not set!";
             }
 
-            if (doc.HasMember(ATC_KEY_PLANID)) {
-                _testID = doc[ATC_KEY_PLANID].GetString();
+            if (doc.HasMember(OLD_ATC_KEY_PLANID)) {
+                _testID = doc[OLD_ATC_KEY_PLANID].GetString();
             } else {
                 _testID = "planId is not set!";
             }
-        }
 
-        {
+            // parse ip & port
+            rapidjson::Value &cfg = doc[OLD_ATC_KEY_CONFIG];
+            if (!cfg.HasMember(OLD_ATC_KEY_IP) || !cfg.HasMember(OLD_ATC_KEY_PORT)) {
+                _status = UdpLogClientState::DONE;
+                return;
+            }
+            const char *remoteIp = cfg[OLD_ATC_KEY_IP].GetString();
+            // The `PORT` property is used by other service and the next port is for log collection.
+            int remotePort = cfg[OLD_ATC_KEY_PORT].GetInt() + 1;
+            setServerAddr(remoteIp, remotePort);
+        } else if (doc.HasMember(ATC_KEY_CONFIG)) {
+            if (doc.HasMember(ATC_KEY_JOBID)) {
+                _testID = doc[ATC_KEY_JOBID].GetString();
+            } else {
+                _testID = "jobId is not set!";
+            }
+            if (doc.HasMember(ATC_KEY_PLATFORMS)) {
+                rapidjson::Value &platforms = doc[ATC_KEY_PLATFORMS];
+                if (!platforms.IsArray() || platforms.Size() < 1) {
+                    _clientID = "array platforms is empty";
+                } else {
+                    rapidjson::Value &plt = platforms[0];
+                    if (!plt.HasMember(ATC_KEY_PLATFORM_INDEX)) {
+                        _clientID = "platforms[0] not key platformIndex";
+                    } else {
+                        rapidjson::Value &index = plt[ATC_KEY_PLATFORM_INDEX];
+                        _clientID = index.IsInt() ? std::to_string(index.GetInt()) : index.GetString();
+                    }
+                }
+            } else {
+                _clientID = "platforms not set!";
+            }
+
             // parse ip & port
             rapidjson::Value &cfg = doc[ATC_KEY_CONFIG];
             if (!cfg.HasMember(ATC_KEY_IP) || !cfg.HasMember(ATC_KEY_PORT)) {
@@ -185,7 +220,11 @@ private:
             // The `PORT` property is used by other service and the next port is for log collection.
             int remotePort = cfg[ATC_KEY_PORT].GetInt() + 1;
             setServerAddr(remoteIp, remotePort);
+        } else {
+            _status = UdpLogClientState::DONE;
+            return;
         }
+
         _bootID = std::chrono::duration_cast<std::chrono::milliseconds>(
                       std::chrono::system_clock::now().time_since_epoch())
                       .count();

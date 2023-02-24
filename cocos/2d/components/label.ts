@@ -1,19 +1,18 @@
 /*
  Copyright (c) 2013-2016 Chukong Technologies Inc.
- Copyright (c) 2017-2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2017-2023 Xiamen Yaji Software Co., Ltd.
 
  http://www.cocos.com
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
-  worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
-  not use Cocos Creator software for developing other software or tools that's
-  used for developing games. You are not granted to publish, distribute,
-  sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -29,16 +28,14 @@ import { BYTEDANCE, EDITOR, JSB } from 'internal:constants';
 import { minigame } from 'pal/minigame';
 import { BitmapFont, Font, SpriteFrame } from '../assets';
 import { ImageAsset, Texture2D } from '../../asset/assets';
-import { ccenum } from '../../core/value-types/enum';
+import { ccenum, cclegacy, Color } from '../../core';
 import { IBatcher } from '../renderer/i-batcher';
 import { FontAtlas } from '../assets/bitmap-font';
 import { CanvasPool, ISharedLabelData, LetterRenderTexture } from '../assembler/label/font-utils';
 import { InstanceMaterialType, UIRenderer } from '../framework/ui-renderer';
 import { TextureBase } from '../../asset/assets/texture-base';
 import { PixelFormat } from '../../asset/assets/asset-enum';
-import { legacyCC } from '../../core/global-exports';
 import { BlendFactor } from '../../gfx';
-import { Color } from '../../core';
 
 const tempColor = Color.WHITE.clone();
 /**
@@ -100,7 +97,7 @@ ccenum(VerticalTextAlignment);
 /**
  * @en Enum for Overflow.
  *
- * @zh 文本超载类型。
+ * @zh 文本溢出行为类型。
  */
 export enum Overflow {
     /**
@@ -164,23 +161,6 @@ export enum CacheMode {
 ccenum(CacheMode);
 
 /**
- * @zh
- * Type 类型。
- */
-/**
- * @zh
- * TTF字体。
- */
-/**
- * @zh
- * 位图字体。
- */
-/**
- * @zh
- * 系统字体。
- */
-
-/**
  * @en
  * The Label Component.
  *
@@ -192,12 +172,32 @@ ccenum(CacheMode);
 @executionOrder(110)
 @menu('2D/Label')
 export class Label extends UIRenderer {
+    /**
+     * @en Enum for horizontal text alignment.
+     *
+     * @zh 文本横向对齐类型。
+     */
     public static HorizontalAlign = HorizontalTextAlignment;
+    /**
+     * @en Enum for vertical text alignment.
+     *
+     * @zh 文本垂直对齐类型。
+     */
     public static VerticalAlign = VerticalTextAlignment;
+    /**
+     * @en Enum for label overflow mode.
+     *
+     * @zh 文本溢出行为类型。
+     */
     public static Overflow = Overflow;
+    /**
+     * @en Enum for cache mode.
+     *
+     * @zh 文本图集缓存类型。
+     */
     public static CacheMode = CacheMode;
     /**
-     * @internal
+     * @deprecated since v3.7.0, this is an engine private interface that will be removed in the future.
      */
     public static _canvasPool = CanvasPool.getInstance();
 
@@ -310,28 +310,6 @@ export class Label extends UIRenderer {
 
     /**
      * @en
-     * Font family of label, only take effect when useSystemFont property is true.
-     *
-     * @zh
-     * 文本字体名称, 只在 useSystemFont 属性为 true 的时候生效。
-     */
-    @displayOrder(8)
-    @visible(function (this: Label) { return !this._isSystemFontUsed; })
-    @tooltip('i18n:label.font_family')
-    get fontFamily () {
-        return this._fontFamily;
-    }
-    set fontFamily (value) {
-        if (this._fontFamily === value) {
-            return;
-        }
-
-        this._fontFamily = value;
-        this.markForUpdateRenderData();
-    }
-
-    /**
-     * @en
      * Line Height of label.
      *
      * @zh
@@ -420,13 +398,70 @@ export class Label extends UIRenderer {
 
     /**
      * @en
+     * Whether use system font name or not.
+     *
+     * @zh
+     * 是否使用系统字体。
+     */
+    @displayOrder(12)
+    @tooltip('i18n:label.system_font')
+    get useSystemFont () {
+        return this._isSystemFontUsed;
+    }
+    set useSystemFont (value) {
+        if (this._isSystemFontUsed === value) {
+            return;
+        }
+
+        this.destroyRenderData();
+
+        if (EDITOR) {
+            if (!value && this._isSystemFontUsed && this._userDefinedFont) {
+                this.font = this._userDefinedFont;
+                this.spacingX = this._spacingX;
+                return;
+            }
+        }
+
+        this._isSystemFontUsed = !!value;
+        if (value) {
+            this.font = null;
+        }
+        this._flushAssembler();
+        this.markForUpdateRenderData();
+    }
+
+    /**
+     * @en
+     * Font family of label, only take effect when useSystemFont property is true.
+     *
+     * @zh
+     * 文本字体名称, 只在 useSystemFont 属性为 true 的时候生效。
+     */
+    @displayOrder(13)
+    @visible(function (this: Label) { return this._isSystemFontUsed; })
+    @tooltip('i18n:label.font_family')
+    get fontFamily () {
+        return this._fontFamily;
+    }
+    set fontFamily (value) {
+        if (this._fontFamily === value) {
+            return;
+        }
+
+        this._fontFamily = value;
+        this.markForUpdateRenderData();
+    }
+
+    /**
+     * @en
      * The font of label.
      *
      * @zh
      * 文本字体。
      */
     @type(Font)
-    @displayOrder(12)
+    @displayOrder(13)
     @visible(function (this: Label) { return !this._isSystemFontUsed; })
     @tooltip('i18n:label.font')
     get font () {
@@ -454,41 +489,6 @@ export class Label extends UIRenderer {
 
         this._fontAtlas = null;
         this.updateRenderData(true);
-    }
-
-    /**
-     * @en
-     * Whether use system font name or not.
-     *
-     * @zh
-     * 是否使用系统字体。
-     */
-    @displayOrder(13)
-    @tooltip('i18n:label.system_font')
-    get useSystemFont () {
-        return this._isSystemFontUsed;
-    }
-    set useSystemFont (value) {
-        if (this._isSystemFontUsed === value) {
-            return;
-        }
-
-        this.destroyRenderData();
-
-        if (EDITOR) {
-            if (!value && this._isSystemFontUsed && this._userDefinedFont) {
-                this.font = this._userDefinedFont;
-                this.spacingX = this._spacingX;
-                return;
-            }
-        }
-
-        this._isSystemFontUsed = !!value;
-        if (value) {
-            this.font = null;
-        }
-        this._flushAssembler();
-        this.markForUpdateRenderData();
     }
 
     /**
@@ -600,18 +600,30 @@ export class Label extends UIRenderer {
         this.markForUpdateRenderData();
     }
 
+    /**
+     * @deprecated since v3.7.0, this is an engine private interface that will be removed in the future.
+     */
     get spriteFrame () {
         return this._texture;
     }
 
+    /**
+     * @deprecated since v3.7.0, this is an engine private interface that will be removed in the future.
+     */
     get ttfSpriteFrame () {
         return this._ttfSpriteFrame;
     }
 
+    /**
+     * @deprecated since v3.7.0, this is an engine private interface that will be removed in the future.
+     */
     get assemblerData () {
         return this._assemblerData;
     }
 
+    /**
+     * @deprecated since v3.7.0, this is an engine private interface that will be removed in the future.
+     */
     get fontAtlas () {
         return this._fontAtlas;
     }
@@ -742,6 +754,11 @@ export class Label extends UIRenderer {
         super.onDestroy();
     }
 
+    /**
+     * @en update render data.
+     * @zh 更新渲染相关数据。
+     * @param force @en Whether to force an immediate update. @zh 是否立马强制更新渲染数据。
+     */
     public updateRenderData (force = false) {
         if (force) {
             this._flushAssembler();
@@ -765,6 +782,9 @@ export class Label extends UIRenderer {
         this.markForUpdateRenderData();
     }
 
+    /**
+     * @deprecated since v3.7.0, this is an engine private interface that will be removed in the future.
+     */
     public setEntityColor (color: Color) {
         if (JSB) {
             if (this._font instanceof BitmapFont) {
@@ -887,4 +907,4 @@ export class Label extends UIRenderer {
     }
 }
 
-legacyCC.Label = Label;
+cclegacy.Label = Label;

@@ -1,7 +1,30 @@
-import { EDITOR } from 'internal:constants';
-import { editorExtrasTag } from '../../core/data';
+/*
+ Copyright (c) 2022-2023 Xiamen Yaji Software Co., Ltd.
 
-import { debug } from '../../core/platform/debug';
+ https://www.cocos.com/
+
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
+
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
+
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ THE SOFTWARE.
+*/
+
+import { EDITOR } from 'internal:constants';
+import { editorExtrasTag } from '../../core';
+
 import { AnimationBlend } from './animation-blend';
 import { ClipMotion } from './clip-motion';
 
@@ -14,31 +37,3 @@ export function getMotionRuntimeID (motion: ClipMotion | AnimationBlend) {
 }
 
 export const GRAPH_DEBUG_ENABLED = false;
-
-export const graphDebug = GRAPH_DEBUG_ENABLED
-    ? debug
-    : EMPTY as typeof debug;
-
-export const graphDebugGroup = GRAPH_DEBUG_ENABLED
-    ? console.group
-    : EMPTY as typeof debug;
-
-export const graphDebugGroupEnd = GRAPH_DEBUG_ENABLED
-    ? console.groupEnd
-    : EMPTY as typeof debug;
-
-function EMPTY (...args: unknown[]) { }
-
-const weightsStats: [string, number][] = [];
-
-export function pushWeight (name: string, weight: number) {
-    weightsStats.push([name, weight]);
-}
-
-export function getWeightsStats () {
-    return `[${weightsStats.map(([name, weight]) => `[${name}: ${weight}]`).join('  ')}]`;
-}
-
-export function clearWeightsStats () {
-    weightsStats.length = 0;
-}

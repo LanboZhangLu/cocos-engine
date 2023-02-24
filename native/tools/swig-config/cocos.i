@@ -18,6 +18,11 @@
 #include "platform/FileUtils.h"
 #include "platform/SAXParser.h"
 #include "math/Vec2.h"
+#include "math/Vec3.h"
+#include "math/Vec4.h"
+#include "math/Mat3.h"
+#include "math/Mat4.h"
+#include "math/Quaternion.h"
 #include "math/Color.h"
 #include "profiler/DebugRenderer.h"
 %}
@@ -41,6 +46,17 @@
 //  1. 'Ignore Section' should be placed before attribute definition and %import/%include
 //  2. namespace is needed
 //
+%ignore cc::RefCounted;
+
+%rename("$ignore", regextarget=1, fullname=1) "cc::Vec2::.*[^2]$";
+%rename("$ignore", regextarget=1, fullname=1) "cc::Vec3::.*[^3]$";
+%rename("$ignore", regextarget=1, fullname=1) "cc::Vec3::t.*$";
+%rename("$ignore", regextarget=1, fullname=1) "cc::Vec4::.*[^4]$";
+%rename("$ignore", regextarget=1, fullname=1) "cc::Mat3::.*[^3]$";
+%rename("$ignore", regextarget=1, fullname=1) "cc::Mat4::.*[^4]$";
+%rename("$ignore", regextarget=1, fullname=1) "cc::Quaternion::.*[^n]$";
+%rename("$ignore", regextarget=1, fullname=1) "cc::Color::.*[^r]$";
+%rename("$ignore", regextarget=1, fullname=1) "cc::Color::r$";
 
 namespace cc {
 //%ignore ISystemWindowManager;
@@ -76,12 +92,16 @@ namespace cc {
 %ignore DebugRenderer::activate;
 %ignore DebugRenderer::render;
 %ignore DebugRenderer::destroy;
+%ignore DebugRenderer::update;
 
 %ignore DebugFontInfo;
 %ignore DebugRendererInfo;
 
 %ignore JSBNativeDataHolder::getData;
 %ignore JSBNativeDataHolder::setData;
+
+%ignore CCObject::setScriptObject;
+%ignore CCObject::getScriptObject;
 
 }
 
@@ -106,6 +126,7 @@ namespace cc {
 // %rename(CanvasGradient) cc::ICanvasGradient;
 %rename(PlistParser) cc::SAXParser;
 
+%rename(Quat) cc::Quaternion;
 
 
 // ----- Module Macro Section ------
@@ -160,13 +181,22 @@ namespace cc {
 //   %import "your_header_file.h" will not generate code for that header file
 //
 %import "base/Macros.h"
+%import "base/RefCounted.h"
 %import "base/memory/Memory.h"
 %import "base/Data.h"
 %import "base/Value.h"
 
 %import "math/MathBase.h"
 %import "math/Geometry.h"
-%import "math/Vec4.h"
+
+%include "math/Vec2.h"
+%include "math/Color.h"
+%include "math/Vec3.h"
+%include "math/Vec4.h"
+%include "math/Mat3.h"
+%include "math/Mat4.h"
+%include "math/Quaternion.h"
+
 %import "platform/interfaces/modules/IScreen.h"
 %import "platform/interfaces/modules/ISystem.h"
 %import "platform/interfaces/modules/INetwork.h"
@@ -185,8 +215,6 @@ namespace cc {
 %include "platform/interfaces/modules/ISystemWindowManager.h"
 %include "platform/FileUtils.h"
 %include "platform/SAXParser.h"
-%include "math/Vec2.h"
-%include "math/Color.h"
 
 %include "profiler/DebugRenderer.h"
 

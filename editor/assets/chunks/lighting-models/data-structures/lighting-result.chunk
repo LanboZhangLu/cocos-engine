@@ -9,5 +9,20 @@ struct LightingResult
   float shadow, ao;
   vec3 lightmapColor;
   vec3 emissive;
-  //vec3 transmittance, scattered;
+
+  // advanced
+#if CC_SURFACES_LIGHTING_USE_FRESNEL
+  float fresnel;
+#endif
+
+#if CC_SURFACES_LIGHTING_TRANSMIT_SPECULAR
+  vec3 directTransmitSpecular, environmentTransmitSpecular;
+#endif
+#if CC_SURFACES_LIGHTING_TRANSMIT_DIFFUSE
+  vec3 directTransmitDiffuse, environmentTransmitDiffuse;
+#endif  
+#if CC_SURFACES_LIGHTING_TRT
+  vec3 directTRT, environmentTRT;
+#endif  
+  //vec3 scattered;
 };

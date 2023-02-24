@@ -1,18 +1,17 @@
 /*
- Copyright (c) 2022 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2022-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
-  worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
-  not use Cocos Creator software for developing other software or tools that's
-  used for developing games. You are not granted to publish, distribute,
-  sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -21,96 +20,15 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- */
-
-/**
- * @packageDocumentation
- * @module component/xr
- */
+*/
 
 import { Vec3 } from '../../core/math';
-import { Node } from '../../core/scene-graph/node';
 import { Event } from '../../input/types';
 
 export enum DeviceType {
     Other = 0,
     Left = 1,
     Right = 2
-}
-
-/**
- * @en The input event type
- * @zh 输入事件类型
- */
-export enum XrControlEventType {
-    SELECT_ENTERED = 'select-entered',
-    SELECT_EXITED = 'select-exited',
-    SELECT_CANCELED = 'select-canceled',
-
-    ACTIVATED = 'OnActivited',
-    DEACTIVITED = 'Deactivited',
-    ACTIVATE_CANCELED = 'activate-canceled',
-
-    UIPRESS_ENTERED = 'UI-press-entered',
-    UIPRESS_EXITED = 'UI-press-exited',
-    UIPRESS_CANCELED = 'UI-press-canceled',
-
-    HOVER_ENTERED = 'hover-entered',
-    HOVER_EXITED = 'hover-exited',
-    HOVER_STAY = 'hover-stay',
-    HOVER_CANCELED = 'hover-canceled'
-}
-
-/**
- * @en
- * Xr handle event.
- *
- * @zh
- * xr手柄事件。
- */
-export class XrEventHandle extends Event {
-    //  export class XrEventHandle {
-    /**
-     * @en Event trigger
-     * @zh 事件触发者（左右手柄等）
-     */
-    public deviceType = DeviceType.Other;
-
-    /**
-     * @en Collision detection point
-     * @zh 碰撞检测点
-     */
-    public hitPoint = new Vec3();
-
-    /**
-     * @en Controller model
-     * @zh Controller模型
-     */
-    public model: Node | null = null;
-
-    /**
-     * @en Handle events
-     * @zh 手柄事件
-     */
-    public eventHandle = 0;
-
-    /**
-     * @en Trigger Id
-     * @zh 触发者Id
-     */
-    public triggerId: string | undefined = "";
-
-    /**
-     * @en The attached node
-     * @zh 被附着者节点
-     */
-    public attachNode: Node | null = null;
-
-    /**
-     * @en Whether to force grab
-     * @zh 是否强制抓取
-     */
-    public forceGrab = true;
 }
 
 /**

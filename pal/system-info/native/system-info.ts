@@ -1,7 +1,29 @@
+/*
+ Copyright (c) 2022-2023 Xiamen Yaji Software Co., Ltd.
+
+ https://www.cocos.com/
+
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
+
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
+
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ THE SOFTWARE.
+*/
+
 import { IFeatureMap } from 'pal/system-info';
 import { EventTarget } from '../../../cocos/core/event';
-import { SplashScreen } from '../../../cocos/core/splash-screen';
-import legacyCC from '../../../predefine';
 import { BrowserType, NetworkType, OS, Platform, Language, Feature } from '../enum-type';
 
 const networkTypeMap: Record<string, NetworkType> = {
@@ -36,6 +58,7 @@ class SystemInfo extends EventTarget {
     public readonly browserVersion: string;
     public readonly isXR: boolean;
     private _featureMap: IFeatureMap;
+    private _initPromise: Promise<void>[];
     // TODO: need to wrap the function __isObjectValid()
 
     public get networkType (): NetworkType {
@@ -76,7 +99,7 @@ class SystemInfo extends EventTarget {
         this.browserType = BrowserType.UNKNOWN;
         this.browserVersion = '';
 
-        this.isXR = typeof xr !== 'undefined';
+        this.isXR = (typeof xr !== 'undefined' && typeof xr.XrEntry !== 'undefined');
 
         this._featureMap = {
             [Feature.WEBP]: true,
@@ -93,7 +116,10 @@ class SystemInfo extends EventTarget {
             [Feature.EVENT_GAMEPAD]: true,
             [Feature.EVENT_HANDLE]: this.isXR,
             [Feature.EVENT_HMD]: this.isXR,
+            [Feature.EVENT_HANDHELD]: (typeof xr !== 'undefined' && typeof xr.ARModule !== 'undefined'),
         };
+
+        this._initPromise = [];
 
         this._registerEvent();
     }
@@ -108,6 +134,14 @@ class SystemInfo extends EventTarget {
         jsb.onClose = () => {
             this.emit('close');
         };
+    }
+
+    private _setFeature (feature: Feature, value: boolean) {
+        return this._featureMap[feature] = value;
+    }
+
+    public init (): Promise<void[]> {
+        return Promise.all(this._initPromise);
     }
 
     public hasFeature (feature: Feature): boolean {
@@ -138,6 +172,11 @@ class SystemInfo extends EventTarget {
     public close () {
         // @ts-expect-error __close() is defined in JSB
         __close();
+    }
+
+    public exit () {
+        // @ts-expect-error __exit() is defined in JSB
+        __exit();
     }
 }
 

@@ -1,18 +1,17 @@
 /****************************************************************************
- Copyright (c) 2019-2021 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2019-2023 Xiamen Yaji Software Co., Ltd.
 
  http://www.cocos.com
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -27,11 +26,13 @@
 #include "application/ApplicationManager.h"
 #include "base/TypeDef.h"
 #include "core/Root.h"
+#include "core/scene-graph/Scene.h"
 #include "editor-support/MiddlewareManager.h"
 #include "renderer/pipeline/Define.h"
 #include "scene/Pass.h"
 
 namespace cc {
+
 Batcher2d::Batcher2d() : Batcher2d(nullptr) {
 }
 
@@ -93,9 +94,18 @@ void Batcher2d::syncRootNodesToNative(ccstd::vector<Node*>&& rootNodes) {
 }
 
 void Batcher2d::fillBuffersAndMergeBatches() {
+    size_t index = 0;
     for (auto* rootNode : _rootNodeArr) {
+        // _batches will add by generateBatch
         walk(rootNode, 1);
         generateBatch(_currEntity, _currDrawInfo);
+
+        auto* scene = rootNode->getScene()->getRenderScene();
+        size_t const count = _batches.size();
+        for (size_t i = index; i < count; i++) {
+            scene->addBatch(_batches.at(i));
+        }
+        index = count;
     }
 }
 
@@ -221,7 +231,7 @@ CC_FORCE_INLINE void Batcher2d::handleModelDraw(RenderEntity* entity, RenderDraw
 
     bool isMask = entity->getIsMask();
     if (isMask) {
-        //Mask Comp
+        // Mask Comp
         insertMaskBatch(entity);
     } else {
         entity->setEnumStencilStage(_stencilManager->getStencilStage());
@@ -255,52 +265,28 @@ CC_FORCE_INLINE void Batcher2d::handleModelDraw(RenderEntity* entity, RenderDraw
     }
 }
 
-CC_FORCE_INLINE void Batcher2d::handleIADraw(RenderEntity* entity, RenderDrawInfo* drawInfo, Node* node) {
-    generateBatch(_currEntity, _currDrawInfo);
-    uint32_t dataHash = drawInfo->getDataHash();
-    entity->setEnumStencilStage(_stencilManager->getStencilStage());
-    auto tempStage = static_cast<StencilStage>(entity->getStencilStage());
-    _currHash = dataHash;
-    _currMaterial = drawInfo->getMaterial();
-    _currStencilStage = tempStage;
-    _currLayer = entity->getNode()->getLayer();
+CC_FORCE_INLINE void Batcher2d::handleMiddlewareDraw(RenderEntity* entity, RenderDrawInfo* drawInfo) {
+    auto layer = entity->getNode()->getLayer();
+    Material* material = drawInfo->getMaterial();
+    auto* texture = drawInfo->getTexture();
+    auto* sampler = drawInfo->getSampler();
+    auto* meshBuffer = drawInfo->getMeshBuffer();
 
-    // make sure next generateBatch return.
-    _currEntity = nullptr;
-    _currDrawInfo = nullptr;
-    _currMeshBuffer = nullptr;
-
-    // if(frame)
-    _currTexture = drawInfo->getTexture();
-    _currSampler = drawInfo->getSampler();
-    _currSamplerHash = _currSampler->getHash();
-    setIndexRange(drawInfo);
-
-    UIMeshBuffer* currMeshBuffer = drawInfo->getMeshBuffer();
-    currMeshBuffer->setDirty(true);
-    gfx::InputAssembler* ia = currMeshBuffer->requireFreeIA(getDevice());
-    ia->setFirstIndex(drawInfo->getIndexOffset());
-    ia->setIndexCount(drawInfo->getIbCount());
-
-    // stencilstage
-    gfx::DepthStencilState* depthStencil = nullptr;
-    ccstd::hash_t dssHash = 0;
-    StencilStage entityStage = entity->getEnumStencilStage();
-    depthStencil = _stencilManager->getDepthStencilState(entityStage, drawInfo->getMaterial());
-    dssHash = _stencilManager->getStencilHash(entityStage);
-
-    auto* curdrawBatch = _drawBatchPool.alloc();
-    curdrawBatch->setVisFlags(_currLayer);
-    curdrawBatch->setInputAssembler(ia);
-    curdrawBatch->fillPass(_currMaterial, depthStencil, dssHash);
-    const auto& pass = curdrawBatch->getPasses().at(0);
-    if (entity->getUseLocal()) {
-        drawInfo->updateLocalDescriptorSet(node, pass->getLocalSetLayout());
-        curdrawBatch->setDescriptorSet(drawInfo->getLocalDes());
+    // check for merge draw
+    auto enableBatch = !entity->getUseLocal();
+    if (enableBatch && _currTexture == texture && _currMeshBuffer == meshBuffer && !_currEntity->getUseLocal() && material->getHash() == _currMaterial->getHash() && drawInfo->getIndexOffset() == _currDrawInfo->getIndexOffset() + _currDrawInfo->getIbCount() && layer == _currLayer) {
+        auto ibCount = _currDrawInfo->getIbCount();
+        _currDrawInfo->setIbCount(ibCount + drawInfo->getIbCount());
     } else {
-        curdrawBatch->setDescriptorSet(getDescriptorSet(_currTexture, _currSampler, pass->getLocalSetLayout()));
+        generateBatch(_currEntity, _currDrawInfo);
+        _currLayer = layer;
+        _currMaterial = material;
+        _currTexture = texture;
+        _currMeshBuffer = meshBuffer;
+        _currEntity = entity;
+        _currDrawInfo = drawInfo;
+        _currHash = 0;
     }
-    _batches.push_back(curdrawBatch);
 }
 
 CC_FORCE_INLINE void Batcher2d::handleSubNode(RenderEntity* entity, RenderDrawInfo* drawInfo) { // NOLINT
@@ -309,7 +295,7 @@ CC_FORCE_INLINE void Batcher2d::handleSubNode(RenderEntity* entity, RenderDrawIn
     }
 }
 
-CC_FORCE_INLINE void Batcher2d::handleDrawInfo(RenderEntity* entity, RenderDrawInfo* drawInfo, Node* node) { //NOLINT(misc-no-recursion)
+CC_FORCE_INLINE void Batcher2d::handleDrawInfo(RenderEntity* entity, RenderDrawInfo* drawInfo, Node* node) { // NOLINT(misc-no-recursion)
     CC_ASSERT(entity);
     CC_ASSERT(drawInfo);
     RenderDrawInfoType drawInfoType = drawInfo->getEnumDrawInfoType();
@@ -321,8 +307,8 @@ CC_FORCE_INLINE void Batcher2d::handleDrawInfo(RenderEntity* entity, RenderDrawI
         case RenderDrawInfoType::MODEL:
             handleModelDraw(entity, drawInfo);
             break;
-        case RenderDrawInfoType::IA:
-            handleIADraw(entity, drawInfo, node);
+        case RenderDrawInfoType::MIDDLEWARE:
+            handleMiddlewareDraw(entity, drawInfo);
             break;
         case RenderDrawInfoType::SUB_NODE:
             handleSubNode(entity, drawInfo);
@@ -333,7 +319,14 @@ CC_FORCE_INLINE void Batcher2d::handleDrawInfo(RenderEntity* entity, RenderDrawI
 }
 
 void Batcher2d::generateBatch(RenderEntity* entity, RenderDrawInfo* drawInfo) {
-    if (drawInfo == nullptr || _currMaterial == nullptr) {
+    if (drawInfo == nullptr) {
+        return;
+    }
+    if (drawInfo->getEnumDrawInfoType() == RenderDrawInfoType::MIDDLEWARE) {
+        generateBatchForMiddleware(entity, drawInfo);
+        return;
+    }
+    if (_currMaterial == nullptr) {
         return;
     }
     gfx::InputAssembler* ia = nullptr;
@@ -381,6 +374,47 @@ void Batcher2d::generateBatch(RenderEntity* entity, RenderDrawInfo* drawInfo) {
     _batches.push_back(curdrawBatch);
 }
 
+void Batcher2d::generateBatchForMiddleware(RenderEntity* entity, RenderDrawInfo* drawInfo) {
+    auto layer = entity->getNode()->getLayer();
+    auto* material = drawInfo->getMaterial();
+    auto* texture = drawInfo->getTexture();
+    auto* sampler = drawInfo->getSampler();
+    auto* meshBuffer = drawInfo->getMeshBuffer();
+    // set meshbuffer offset
+    auto indexOffset = drawInfo->getIndexOffset();
+    auto indexCount = drawInfo->getIbCount();
+    indexOffset += indexCount;
+    if (meshBuffer->getIndexOffset() < indexOffset) {
+        meshBuffer->setIndexOffset(indexOffset);
+    }
+
+    meshBuffer->setDirty(true);
+    gfx::InputAssembler* ia = meshBuffer->requireFreeIA(getDevice());
+    ia->setFirstIndex(drawInfo->getIndexOffset());
+    ia->setIndexCount(drawInfo->getIbCount());
+
+    // stencilstage
+    auto stencilStage = _stencilManager->getStencilStage();
+    gfx::DepthStencilState* depthStencil = _stencilManager->getDepthStencilState(stencilStage, material);
+    ccstd::hash_t dssHash = _stencilManager->getStencilHash(stencilStage);
+
+    auto* curdrawBatch = _drawBatchPool.alloc();
+    curdrawBatch->setVisFlags(_currLayer);
+    curdrawBatch->setInputAssembler(ia);
+    curdrawBatch->fillPass(material, depthStencil, dssHash);
+    const auto& pass = curdrawBatch->getPasses().at(0);
+    if (entity->getUseLocal()) {
+        drawInfo->updateLocalDescriptorSet(entity->getNode(), pass->getLocalSetLayout());
+        curdrawBatch->setDescriptorSet(drawInfo->getLocalDes());
+    } else {
+        curdrawBatch->setDescriptorSet(getDescriptorSet(texture, sampler, pass->getLocalSetLayout()));
+    }
+    _batches.push_back(curdrawBatch);
+    // make sure next generateBatch return.
+    resetRenderStates();
+    _currMeshBuffer = nullptr;
+}
+
 void Batcher2d::resetRenderStates() {
     _currMaterial = nullptr;
     _currTexture = nullptr;
@@ -391,7 +425,7 @@ void Batcher2d::resetRenderStates() {
     _currDrawInfo = nullptr;
 }
 
-gfx::DescriptorSet* Batcher2d::getDescriptorSet(gfx::Texture* texture, gfx::Sampler* sampler, gfx::DescriptorSetLayout* dsLayout) {
+gfx::DescriptorSet* Batcher2d::getDescriptorSet(gfx::Texture* texture, gfx::Sampler* sampler, const gfx::DescriptorSetLayout* dsLayout) {
     ccstd::hash_t hash = 2;
     size_t textureHash;
     if (texture != nullptr) {
@@ -448,12 +482,6 @@ bool Batcher2d::initialize() {
 void Batcher2d::update() {
     fillBuffersAndMergeBatches();
     resetRenderStates();
-
-    for (const auto& scene : Root::getInstance()->getScenes()) {
-        for (auto* batch : _batches) {
-            scene->addBatch(batch);
-        }
-    }
 }
 
 void Batcher2d::uploadBuffers() {
@@ -465,30 +493,8 @@ void Batcher2d::uploadBuffers() {
         meshRenderData->uploadBuffers();
     }
 
-    size_t i = 0;
-    size_t ii = 0;
     for (auto& map : _meshBuffersMap) {
         for (auto& buffer : map.second) {
-#if CC_USE_MIDDLEWARE
-            // set vData and iData With Middleware buffer.
-            if (buffer->getUseLinkData()) {
-                int nativeFormat = 6;
-                size_t index = i;
-                if (buffer->getAttributes().size() == 3) {
-                    i++;
-                } else {
-                    nativeFormat = 7;
-                    index = ii;
-                    ii++;
-                }
-                auto* middleWare = middleware::MiddlewareManager::getInstance();
-                auto* middleBuffer = middleWare->getMeshBuffer(nativeFormat);
-                auto* srcIBuf = middleBuffer->getIBFromBufferArray(index);
-                auto* srcVBuf = middleBuffer->getVBFromBufferArray(index);
-                buffer->setVData(reinterpret_cast<float*>(srcVBuf));
-                buffer->setIData(reinterpret_cast<uint16_t*>(srcIBuf));
-            }
-#endif
             buffer->uploadBuffers();
             buffer->reset();
         }
@@ -516,7 +522,7 @@ void Batcher2d::reset() {
             }
         }
     }
-    //meshBuffer cannot clear because it is not transported at every frame.
+    // meshBuffer cannot clear because it is not transported at every frame.
 
     _currMeshBuffer = nullptr;
     _indexStart = 0;

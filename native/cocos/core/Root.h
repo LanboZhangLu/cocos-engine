@@ -1,18 +1,17 @@
 /****************************************************************************
- Copyright (c) 2021 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2021-2023 Xiamen Yaji Software Co., Ltd.
 
  http://www.cocos.com
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -21,19 +20,24 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- ****************************************************************************/
+****************************************************************************/
 #pragma once
 
 #include <cstdint>
 //#include "3d/skeletal-animation/DataPoolManager.h"
+#include "bindings/event/EventDispatcher.h"
+#include "core/event/Event.h"
 #include "core/memop/Pool.h"
 #include "renderer/pipeline/RenderPipeline.h"
+#include "renderer/pipeline/DebugView.h"
 #include "scene/DrawBatch2D.h"
 #include "scene/Light.h"
 #include "scene/Model.h"
 #include "scene/RenderScene.h"
 #include "scene/RenderWindow.h"
 #include "scene/SphereLight.h"
+#include "scene/PointLight.h"
+#include "scene/RangedDirectionalLight.h"
 
 namespace cc {
 class IXRInterface;
@@ -49,23 +53,21 @@ namespace render {
 class PipelineRuntime;
 class Pipeline;
 } // namespace render
-class CallbacksInvoker;
 class Batcher2d;
-
-struct CC_DLL DebugViewConfig {
-    uint8_t singleMode;
-    uint8_t compositeModeBitCount;
-    uint32_t compositeModeValue;
-    bool lightingWithAlbedo;
-    bool csmLayerColoration;
-};
 
 struct ISystemWindowInfo;
 class ISystemWindow;
 
 class Root final {
+    IMPL_EVENT_TARGET(Root)
+    DECLARE_TARGET_EVENT_BEGIN(Root)
+    TARGET_EVENT_ARG0(BeforeCommit)
+    TARGET_EVENT_ARG0(BeforeRender)
+    TARGET_EVENT_ARG0(AfterRender)
+    TARGET_EVENT_ARG0(PipelineChanged)
+    DECLARE_TARGET_EVENT_END()
 public:
-    static Root *getInstance(); //cjh todo: put Root Managerment to Director class.
+    static Root *getInstance(); // cjh todo: put Root Managerment to Director class.
     explicit Root(gfx::Device *device);
     ~Root();
 
@@ -76,10 +78,11 @@ public:
     /**
      * @zh
      * 重置大小
-     * @param width 屏幕宽度
-     * @param height 屏幕高度
+     * @param width 窗口宽度
+     * @param height 窗口高度
+     * @param windowId 窗口 ID
      */
-    void resize(uint32_t windowId, uint32_t width, uint32_t height);
+    void resize(uint32_t width, uint32_t height, uint32_t windowId);
 
     bool setRenderPipeline(pipeline::RenderPipeline *rppl = nullptr);
     void onGlobalPipelineStateChanged();
@@ -155,7 +158,7 @@ public:
 #ifndef SWIGCOCOS
     template <typename T, typename = std::enable_if_t<std::is_base_of<scene::Model, T>::value>>
     T *createModel() {
-        //cjh TODO: need use model pool?
+        // cjh TODO: need use model pool?
         T *model = ccnew T();
         model->initialize();
         return model;
@@ -167,7 +170,7 @@ public:
 #ifndef SWIGCOCOS
     template <typename T, typename = std::enable_if_t<std::is_base_of<scene::Light, T>::value>>
     T *createLight() {
-        //TODO(xwx): need use model pool?
+        // TODO(xwx): need use model pool?
         T *light = ccnew T();
         light->initialize();
         return light;
@@ -247,8 +250,7 @@ public:
      * @zh
      * 渲染调试数据
      */
-    inline void setDebugViewConfig(const DebugViewConfig &config) { _debugViewConfig = config; }
-    inline const DebugViewConfig &getDebugViewConfig() const { return _debugViewConfig; }
+    inline pipeline::DebugView *getDebugView() const { return _debugView.get(); }
 
     /**
      * @zh
@@ -286,16 +288,20 @@ public:
 
     inline bool isUsingDeferredPipeline() const { return _useDeferredPipeline; }
 
-    inline CallbacksInvoker *getEventProcessor() const { return _eventProcessor; }
-
     scene::RenderWindow *createRenderWindowFromSystemWindow(uint32_t windowId);
     scene::RenderWindow *createRenderWindowFromSystemWindow(cc::ISystemWindow *window);
 
+    const ccstd::vector<scene::Camera *> &getCameraList() const {
+        return _cameraList;
+    }
+
 private:
     void frameMoveBegin();
-    void frameMoveProcess(bool isNeedUpdateScene, int32_t totalFrames, const ccstd::vector<IntrusivePtr<scene::RenderWindow>> &windows);
+    void frameMoveProcess(bool isNeedUpdateScene, int32_t totalFrames);
     void frameMoveEnd();
     void doXRFrameMove(int32_t totalFrames);
+    void addWindowEventListener();
+    void removeWindowEventListener();
 
     gfx::Device *_device{nullptr};
     gfx::Swapchain *_swapchain{nullptr};
@@ -308,7 +314,7 @@ private:
     std::unique_ptr<render::PipelineRuntime> _pipelineRuntime;
     //    IntrusivePtr<DataPoolManager>                  _dataPoolMgr;
     ccstd::vector<IntrusivePtr<scene::RenderScene>> _scenes;
-    DebugViewConfig _debugViewConfig;
+    std::unique_ptr<pipeline::DebugView> _debugView;
     float _cumulativeTime{0.F};
     float _frameTime{0.F};
     float _fpsTime{0.F};
@@ -316,14 +322,14 @@ private:
     uint32_t _fps{0};
     uint32_t _fixedFPS{0};
     bool _useDeferredPipeline{false};
-    bool _usesCustomPipeline{false};
-    CallbacksInvoker *_eventProcessor{nullptr};
+    bool _usesCustomPipeline{true};
     IXRInterface *_xr{nullptr};
+    events::WindowDestroy::Listener _windowDestroyListener;
+    events::WindowRecreated::Listener _windowRecreatedListener;
 
     // Cache ccstd::vector to avoid allocate every frame in frameMove
     ccstd::vector<scene::Camera *> _cameraList;
     ccstd::vector<gfx::Swapchain *> _swapchains;
     //
 };
-
 } // namespace cc

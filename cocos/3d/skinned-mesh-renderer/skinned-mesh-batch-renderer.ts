@@ -1,14 +1,14 @@
 /*
- Copyright (c) 2017-2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2017-2023 Xiamen Yaji Software Co., Ltd.
 
  http://www.cocos2d-x.org
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
- in the Software without restriction, including without limitation the rights
- to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- copies of the Software, and to permit persons to whom the Software is
- furnished to do so, subject to the following conditions:
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
  The above copyright notice and this permission notice shall be included in
  all copies or substantial portions of the Software.
@@ -32,12 +32,10 @@ import { Material } from '../../asset/assets/material';
 import { Mesh } from '../assets/mesh';
 import { Skeleton } from '../assets/skeleton';
 import { Texture2D } from '../../asset/assets/texture-2d';
-import { CCString } from '../../core/data/utils/attribute';
+import { CCString, Mat4, Vec2, Vec3, cclegacy } from '../../core';
 import { AttributeName, FormatInfos, Format, Type, Attribute, BufferTextureCopy } from '../../gfx';
-import { Mat4, Vec2, Vec3 } from '../../core/math';
 import { mapBuffer, readBuffer, writeBuffer } from '../misc/buffer';
 import { SkinnedMeshRenderer } from './skinned-mesh-renderer';
-import { legacyCC } from '../../core/global-exports';
 
 const repeat = (n: number) => n - Math.floor(n);
 const batch_id: Attribute = new Attribute(AttributeName.ATTR_BATCH_ID, Format.R32F);
@@ -477,7 +475,7 @@ export class SkinnedMeshBatchRenderer extends SkinnedMeshRenderer {
             }
         }
         const gfxTex = target.getGFXTexture()!;
-        const { device } = legacyCC.director.root!;
+        const { device } = cclegacy.director.root!;
         if (texBuffers.length > 0) { device.copyBuffersToTexture(texBuffers, gfxTex, texBufferRegions); }
         if (texImages.length > 0) { device.copyTexImagesToTexture(texImages, gfxTex, texImageRegions); }
     }
@@ -555,7 +553,7 @@ export class SkinnedMeshBatchRenderer extends SkinnedMeshRenderer {
         const oldMeshData = mesh.data;
         const newDataView = new DataView(newMeshData.buffer);
         const oldDataView = new DataView(oldMeshData.buffer);
-        const { isLittleEndian } = legacyCC.sys;
+        const { isLittleEndian } = cclegacy.sys;
         for (const b in modifiedBundles) {
             const newBundle = newMeshStruct.vertexBundles[b];
             const oldBundle = mesh.struct.vertexBundles[b];

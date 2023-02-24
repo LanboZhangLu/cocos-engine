@@ -1,18 +1,17 @@
 /****************************************************************************
- Copyright (c) 2022 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2022-2023 Xiamen Yaji Software Co., Ltd.
 
  http://www.cocos.com
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -126,18 +125,10 @@ constexpr void validateParameterTypes(const std::tuple<ARGS...> * /*unused*/) {
         validateParameterType<ARGS>()...};
 }
 
-template <typename T>
-struct ListEntry {
-    ListEntry<T> *prevEntry{nullptr};
-    ListEntry<T> *nextEntry{nullptr};
-    T *prev() { return static_cast<T *>(prevEntry); }
-    T *next() { return static_cast<T *>(nextEntry); }
-};
-
 class EventBus;
 struct EventCallbackBase;
 
-class Listener : public ListEntry<Listener> {
+class Listener {
 public:
     explicit Listener(BusType type);
     Listener(BusType type, const char *name);
@@ -165,7 +156,7 @@ class EventBus {
 public:
     static EventBus *acquire(BusType type);
 
-    EventBus();
+    EventBus() = default;
 
     template <typename... ARGS>
     void send(ARGS &&...args);
@@ -174,14 +165,7 @@ private:
     void dispatch(EventBase *event);
     void addListener(Listener *);
     void removeListener(Listener *);
-
-    union {
-        ListEntry<Listener> _entry;
-        struct {
-            ListEntry<Listener> *first{nullptr};
-            ListEntry<Listener> *last{nullptr};
-        } _list;
-    };
+    std::vector<Listener *> _listeners;
 
     friend class Listener;
 };

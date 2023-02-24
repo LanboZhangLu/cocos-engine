@@ -1,18 +1,18 @@
+/* eslint-disable max-len */
 /*
- Copyright (c) 2022 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2022-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -21,17 +21,13 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- */
+*/
 
-import { JSB } from 'internal:constants';
-import { legacyCC } from '../core/global-exports';
-import { error, getError } from '../core/platform/debug';
-import { sys } from '../core/platform/sys';
+import { JSB, WEBGPU } from 'internal:constants';
+import { cclegacy, error, getError, sys, screen, Settings, settings } from '../core';
 import { BindingMappingInfo, DeviceInfo, SwapchainInfo } from './base/define';
 import { Device } from './base/device';
 import { Swapchain } from './base/swapchain';
-import { screen } from '../core/platform/screen';
-import { Settings, settings } from '../core/settings';
 import { BrowserType } from '../../pal/system-info/enum-type';
 
 /**
@@ -88,6 +84,7 @@ export enum RenderType {
 /**
  * @internal
  */
+
 export class DeviceManager {
     private initialized = false;
     private _gfxDevice!: Device;
@@ -115,11 +112,11 @@ export class DeviceManager {
         if (this._renderType === RenderType.WEBGL) {
             const deviceInfo = new DeviceInfo(bindingMappingInfo);
 
-            if (JSB && window.gfx) {
+            if (JSB && (globalThis as any).gfx) {
                 this._gfxDevice = gfx.DeviceManager.create(deviceInfo);
             } else {
-                let useWebGL2 = (!!window.WebGL2RenderingContext);
-                const userAgent = window.navigator.userAgent.toLowerCase();
+                let useWebGL2 = (!!globalThis.WebGL2RenderingContext);
+                const userAgent = globalThis.navigator.userAgent.toLowerCase();
                 if (userAgent.indexOf('safari') !== -1 && userAgent.indexOf('chrome') === -1
                     || sys.browserType === BrowserType.UC // UC browser implementation doesn't conform to WebGL2 standard
                 ) {
@@ -127,14 +124,17 @@ export class DeviceManager {
                 }
 
                 const deviceCtors: Constructor<Device>[] = [];
-                if (useWebGL2 && legacyCC.WebGL2Device) {
-                    deviceCtors.push(legacyCC.WebGL2Device);
+                if (WEBGPU) {
+                    deviceCtors.push(cclegacy.WebGPUDevice);
                 }
-                if (legacyCC.WebGLDevice) {
-                    deviceCtors.push(legacyCC.WebGLDevice);
+                if (useWebGL2 && cclegacy.WebGL2Device) {
+                    deviceCtors.push(cclegacy.WebGL2Device);
                 }
-                if (legacyCC.EmptyDevice) {
-                    deviceCtors.push(legacyCC.EmptyDevice);
+                if (cclegacy.WebGLDevice) {
+                    deviceCtors.push(cclegacy.WebGLDevice);
+                }
+                if (cclegacy.EmptyDevice) {
+                    deviceCtors.push(cclegacy.EmptyDevice);
                 }
 
                 Device.canvas = canvas!;
@@ -144,8 +144,8 @@ export class DeviceManager {
                 }
                 this._initSwapchain();
             }
-        } else if (this._renderType === RenderType.HEADLESS && legacyCC.EmptyDevice) {
-            this._gfxDevice = new legacyCC.EmptyDevice();
+        } else if (this._renderType === RenderType.HEADLESS && cclegacy.EmptyDevice) {
+            this._gfxDevice = new cclegacy.EmptyDevice();
             this._gfxDevice.initialize(new DeviceInfo(bindingMappingInfo));
             this._initSwapchain();
         }
@@ -161,7 +161,7 @@ export class DeviceManager {
     }
 
     private _initSwapchain () {
-        const swapchainInfo = new SwapchainInfo(this._canvas!);
+        const swapchainInfo = new SwapchainInfo(1, this._canvas!);
         const windowSize = screen.windowSize;
         swapchainInfo.width = windowSize.width;
         swapchainInfo.height = windowSize.height;

@@ -1,18 +1,17 @@
 /****************************************************************************
- Copyright (c) 2022 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2022-2023 Xiamen Yaji Software Co., Ltd.
 
  http://www.cocos.com
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -23,13 +22,12 @@
  THE SOFTWARE.
 ****************************************************************************/
 #include "plugins/bus/EventBus.h"
-#include <cassert>
 #include <cstring>
 #include <unordered_map>
+#include "base/Macros.h"
 
 namespace cc {
 namespace plugin {
-using ListenerEntry = ListEntry<Listener>;
 
 Listener::Listener(BusType type) : Listener(EventBus::acquire(type)) {}
 
@@ -52,40 +50,25 @@ EventBus *EventBus::acquire(BusType type) {
     return &cache[type];
 }
 
-EventBus::EventBus() {
-    _list.first = _list.last = &_entry;
-}
-
 void EventBus::addListener(Listener *listener) {
-    assert(listener->nextEntry == nullptr && listener->prevEntry == nullptr);
-    listener->prevEntry = _list.last;
-    listener->nextEntry = &_entry;
-    _list.first = _list.first == _list.last ? listener : _list.first;
-    _list.last = listener;
+    CC_ASSERT(std::find(_listeners.begin(), _listeners.end(), listener) == _listeners.end());
+    _listeners.emplace_back(listener);
 }
 
 void EventBus::removeListener(Listener *listener) {
-    if (listener->nextEntry == nullptr || listener->prevEntry == nullptr) {
-        return;
+    auto tgt = std::find(_listeners.begin(), _listeners.end(), listener);
+    if (tgt != _listeners.end()) {
+        _listeners.erase(tgt);
     }
-    _list.first = listener->prevEntry;
-    _list.last = listener->nextEntry;
-    listener->nextEntry = listener->prevEntry = nullptr;
 }
 
 void EventBus::dispatch(EventBase *event) {
-    static_assert(offsetof(Listener, prevEntry) == 0, "Listener should inherit ListEntry");
-    static_assert(offsetof(EventBus, _list) == 0, "EventBus should contains ListEntry");
-    static_assert(sizeof(_list) == sizeof(_entry), "ListEntry size should match");
-    auto *curr = _list.first;
-    while (curr != &_entry) {
-        auto *listener = reinterpret_cast<Listener *>(curr);
+    for (auto *listener : _listeners) {
         for (auto &handle : listener->_handles) {
             if (strcmp(handle->signature(), event->signature()) == 0) {
                 handle->invoke(event);
             }
         }
-        curr = curr->nextEntry;
     }
 }
 

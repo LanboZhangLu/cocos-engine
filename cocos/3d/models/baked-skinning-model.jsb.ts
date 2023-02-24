@@ -1,13 +1,36 @@
-import { legacyCC } from '../../core/global-exports';
+/*
+ Copyright (c) 2022-2023 Xiamen Yaji Software Co., Ltd.
+
+ https://www.cocos.com/
+
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
+
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
+
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ THE SOFTWARE.
+*/
+
+import { cclegacy, geometry } from '../../core';
 import { Skeleton } from '../assets/skeleton';
-import { AABB } from '../../core/geometry';
 import { Mesh } from '../assets/mesh';
-import { Node } from '../../core/scene-graph/node'
-import { AnimationClip } from "../../core";
+import { Node } from '../../scene-graph/node'
+import { AnimationClip } from "../../animation";
 import { IJointTextureHandle } from '../skeletal-animation/skeletal-animation-utils';
 
 export const BakedSkinningModel = jsb.BakedSkinningModel;
-legacyCC.BakedSkinningModel = jsb.BakedSkinningModel;
+cclegacy.BakedSkinningModel = jsb.BakedSkinningModel;
 const MorphModel = jsb.MorphModel;
 
 const bakedSkinningModelProto: any = BakedSkinningModel.prototype;
@@ -15,7 +38,7 @@ const bakedSkinningModelProto: any = BakedSkinningModel.prototype;
 bakedSkinningModelProto._ctor = function () {
     jsb.Model.prototype._ctor.call(this);
     this.uploadedAnim = undefined;
-    this._dataPoolManager = legacyCC.director.root.dataPoolManager;
+    this._dataPoolManager = cclegacy.director.root.dataPoolManager;
     const jointTextureInfo = new Float32Array(4);
     const animInfo = this._dataPoolManager.jointAnimationInfo.getData();
     this._jointsMedium = { buffer: null, jointTextureInfo, animInfo, texture: null, boundsInfo: null };
@@ -52,7 +75,7 @@ bakedSkinningModelProto.uploadAnimation = function (anim: AnimationClip | null) 
     this.setUploadedAnimForJS(!!anim);
     const resMgr = this._dataPoolManager;
     let texture: IJointTextureHandle | null = null;
-    let modelBounds: AABB | null = null;
+    let modelBounds: geometry.AABB | null = null;
     if (anim) {
         texture = resMgr.jointTexturePool.getSequencePoseTexture(this._skeleton, anim, this._mesh, this.transform);
         this._jointsMedium.boundsInfo = texture && texture.bounds.get(this._mesh.hash)!;

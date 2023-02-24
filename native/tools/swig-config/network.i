@@ -30,9 +30,9 @@
 //  1. 'Ignore Section' should be placed before attribute definition and %import/%include
 //  2. namespace is needed
 //
+%ignore cc::RefCounted;
 %ignore cc::network::Downloader::createDataTask;
 %ignore cc::network::Downloader::createDownloadTask;
-%ignore cc::network::Downloader::abort;
 %ignore cc::network::Downloader::setOnError;
 %ignore cc::network::Downloader::setOnSuccess;
 
@@ -86,6 +86,7 @@
 //   %import "your_header_file.h" will not generate code for that header file
 //
 %import "base/Macros.h"
+%import "base/RefCounted.h"
 
 // ----- Include Section ------
 // Brief: Include header files in which classes and methods will be bound

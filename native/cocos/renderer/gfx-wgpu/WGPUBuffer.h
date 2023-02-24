@@ -1,18 +1,17 @@
 /****************************************************************************
- Copyright (c) 2020-2021 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2020-2023 Xiamen Yaji Software Co., Ltd.
 
  http://www.cocos.com
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -24,8 +23,9 @@
 ****************************************************************************/
 
 #pragma once
-#include <emscripten/bind.h>
-#include <emscripten/val.h>
+#ifdef CC_WGPU_WASM
+    #include "WGPUDef.h"
+#endif
 #include "base/std/container/vector.h"
 #include "gfx-base/GFXBuffer.h"
 
@@ -34,37 +34,28 @@ namespace gfx {
 
 struct CCWGPUBufferObject;
 
-class CCWGPUBuffer final : public emscripten::wrapper<Buffer> {
+class CCWGPUBuffer final : public Buffer {
 public:
-    EMSCRIPTEN_WRAPPER(CCWGPUBuffer);
     CCWGPUBuffer();
-    ~CCWGPUBuffer() = default;
+    ~CCWGPUBuffer();
+
+    inline CCWGPUBufferObject *gpuBufferObject() const { return _gpuBufferObject; }
+    inline uint32_t getOffset() const { return _offset; }
+    void update(const DrawInfoList &drawInfos);
+    // used before unmap?
+    void check();
+    // stamp current resource handler
+    void stamp();
+    // resource handler changed?
+    inline bool internalChanged() const { return _internalChanged; }
+
+    static CCWGPUBuffer *defaultUniformBuffer();
+    static CCWGPUBuffer *defaultStorageBuffer();
 
     void update(const void *buffer, uint32_t size) override;
 
-    inline CCWGPUBufferObject *gpuBufferObject() const { return _gpuBufferObject; }
-
-    static CCWGPUBuffer *defaultUniformBuffer();
-
-    static CCWGPUBuffer *defaultStorageBuffer();
-
-    inline uint32_t getOffset() const { return _offset; }
-
-    void update(const emscripten::val &v, uint32_t size) {
-        ccstd::vector<uint8_t> buffer = emscripten::convertJSArrayToNumberVector<uint8_t>(v);
-        update(reinterpret_cast<const void *>(buffer.data()), size);
-    }
-
-    void update(const DrawInfoList &drawInfos);
-
-    // used before unmap?
-    void check();
-
-    // stamp current resource handler
-    void stamp();
-
-    // resource handler changed?
-    inline bool internalChanged() const { return _internalChanged; }
+    EXPORT_EMS(
+        void update(const emscripten::val &v, uint32_t size);)
 
 protected:
     void doInit(const BufferInfo &info) override;

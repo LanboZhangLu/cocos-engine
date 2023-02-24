@@ -1,18 +1,17 @@
 /****************************************************************************
- Copyright (c) 2021-2022 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2021-2023 Xiamen Yaji Software Co., Ltd.
 
  http://www.cocos.com
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -35,68 +34,6 @@ namespace cc {
 
 namespace render {
 
-ResourceGraph::ResourceGraph(const allocator_type& alloc) noexcept
-: vertices(alloc),
-  names(alloc),
-  descs(alloc),
-  traits(alloc),
-  states(alloc),
-  resources(alloc),
-  buffers(alloc),
-  textures(alloc),
-  framebuffers(alloc),
-  swapchains(alloc),
-  valueIndex(alloc) {}
-
-ResourceGraph::ResourceGraph(ResourceGraph&& rhs, const allocator_type& alloc)
-: vertices(std::move(rhs.vertices), alloc),
-  names(std::move(rhs.names), alloc),
-  descs(std::move(rhs.descs), alloc),
-  traits(std::move(rhs.traits), alloc),
-  states(std::move(rhs.states), alloc),
-  resources(std::move(rhs.resources), alloc),
-  buffers(std::move(rhs.buffers), alloc),
-  textures(std::move(rhs.textures), alloc),
-  framebuffers(std::move(rhs.framebuffers), alloc),
-  swapchains(std::move(rhs.swapchains), alloc),
-  valueIndex(std::move(rhs.valueIndex), alloc) {}
-
-ResourceGraph::ResourceGraph(ResourceGraph const& rhs, const allocator_type& alloc)
-: vertices(rhs.vertices, alloc),
-  names(rhs.names, alloc),
-  descs(rhs.descs, alloc),
-  traits(rhs.traits, alloc),
-  states(rhs.states, alloc),
-  resources(rhs.resources, alloc),
-  buffers(rhs.buffers, alloc),
-  textures(rhs.textures, alloc),
-  framebuffers(rhs.framebuffers, alloc),
-  swapchains(rhs.swapchains, alloc),
-  valueIndex(rhs.valueIndex, alloc) {}
-
-// ContinuousContainer
-void ResourceGraph::reserve(vertices_size_type sz) {
-    vertices.reserve(sz);
-    names.reserve(sz);
-    descs.reserve(sz);
-    traits.reserve(sz);
-    states.reserve(sz);
-}
-
-ResourceGraph::Vertex::Vertex(const allocator_type& alloc) noexcept
-: outEdges(alloc),
-  inEdges(alloc) {}
-
-ResourceGraph::Vertex::Vertex(Vertex&& rhs, const allocator_type& alloc)
-: outEdges(std::move(rhs.outEdges), alloc),
-  inEdges(std::move(rhs.inEdges), alloc),
-  handle(std::move(rhs.handle)) {}
-
-ResourceGraph::Vertex::Vertex(Vertex const& rhs, const allocator_type& alloc)
-: outEdges(rhs.outEdges, alloc),
-  inEdges(rhs.inEdges, alloc),
-  handle(rhs.handle) {}
-
 RasterSubpass::RasterSubpass(const allocator_type& alloc) noexcept
 : rasterViews(alloc),
   computeViews(alloc) {}
@@ -110,23 +47,23 @@ RasterSubpass::RasterSubpass(RasterSubpass const& rhs, const allocator_type& all
   computeViews(rhs.computeViews, alloc) {}
 
 SubpassGraph::SubpassGraph(const allocator_type& alloc) noexcept
-: vertices(alloc),
+: _vertices(alloc),
   names(alloc),
   subpasses(alloc) {}
 
 SubpassGraph::SubpassGraph(SubpassGraph&& rhs, const allocator_type& alloc)
-: vertices(std::move(rhs.vertices), alloc),
+: _vertices(std::move(rhs._vertices), alloc),
   names(std::move(rhs.names), alloc),
   subpasses(std::move(rhs.subpasses), alloc) {}
 
 SubpassGraph::SubpassGraph(SubpassGraph const& rhs, const allocator_type& alloc)
-: vertices(rhs.vertices, alloc),
+: _vertices(rhs._vertices, alloc),
   names(rhs.names, alloc),
   subpasses(rhs.subpasses, alloc) {}
 
 // ContinuousContainer
 void SubpassGraph::reserve(vertices_size_type sz) {
-    vertices.reserve(sz);
+    _vertices.reserve(sz);
     names.reserve(sz);
     subpasses.reserve(sz);
 }
@@ -146,25 +83,93 @@ SubpassGraph::Vertex::Vertex(Vertex const& rhs, const allocator_type& alloc)
 RasterPass::RasterPass(const allocator_type& alloc) noexcept
 : rasterViews(alloc),
   computeViews(alloc),
-  subpassGraph(alloc) {}
+  subpassGraph(alloc),
+  versionName(alloc) {}
 
 RasterPass::RasterPass(RasterPass&& rhs, const allocator_type& alloc)
-: isValid(rhs.isValid),
-  rasterViews(std::move(rhs.rasterViews), alloc),
+: rasterViews(std::move(rhs.rasterViews), alloc),
   computeViews(std::move(rhs.computeViews), alloc),
   subpassGraph(std::move(rhs.subpassGraph), alloc),
   width(rhs.width),
   height(rhs.height),
-  viewport(rhs.viewport) {}
+  viewport(rhs.viewport),
+  versionName(std::move(rhs.versionName), alloc),
+  version(rhs.version),
+  showStatistics(rhs.showStatistics) {}
 
 RasterPass::RasterPass(RasterPass const& rhs, const allocator_type& alloc)
-: isValid(rhs.isValid),
-  rasterViews(rhs.rasterViews, alloc),
+: rasterViews(rhs.rasterViews, alloc),
   computeViews(rhs.computeViews, alloc),
   subpassGraph(rhs.subpassGraph, alloc),
   width(rhs.width),
   height(rhs.height),
-  viewport(rhs.viewport) {}
+  viewport(rhs.viewport),
+  versionName(rhs.versionName, alloc),
+  version(rhs.version),
+  showStatistics(rhs.showStatistics) {}
+
+PersistentRenderPassAndFramebuffer::PersistentRenderPassAndFramebuffer(const allocator_type& alloc) noexcept
+: clearColors(alloc) {}
+
+PersistentRenderPassAndFramebuffer::PersistentRenderPassAndFramebuffer(IntrusivePtr<gfx::RenderPass> renderPassIn, IntrusivePtr<gfx::Framebuffer> framebufferIn, const allocator_type& alloc) noexcept
+: renderPass(std::move(renderPassIn)),
+  framebuffer(std::move(framebufferIn)),
+  clearColors(alloc) {}
+
+PersistentRenderPassAndFramebuffer::PersistentRenderPassAndFramebuffer(PersistentRenderPassAndFramebuffer&& rhs, const allocator_type& alloc)
+: renderPass(std::move(rhs.renderPass)),
+  framebuffer(std::move(rhs.framebuffer)),
+  clearColors(std::move(rhs.clearColors), alloc),
+  clearDepth(rhs.clearDepth),
+  clearStencil(rhs.clearStencil) {}
+
+PersistentRenderPassAndFramebuffer::PersistentRenderPassAndFramebuffer(PersistentRenderPassAndFramebuffer const& rhs, const allocator_type& alloc)
+: renderPass(rhs.renderPass),
+  framebuffer(rhs.framebuffer),
+  clearColors(rhs.clearColors, alloc),
+  clearDepth(rhs.clearDepth),
+  clearStencil(rhs.clearStencil) {}
+
+ResourceGraph::ResourceGraph(const allocator_type& alloc) noexcept
+: _vertices(alloc),
+  names(alloc),
+  descs(alloc),
+  traits(alloc),
+  states(alloc),
+  samplerInfo(alloc),
+  resources(alloc),
+  managedBuffers(alloc),
+  managedTextures(alloc),
+  buffers(alloc),
+  textures(alloc),
+  framebuffers(alloc),
+  swapchains(alloc),
+  valueIndex(alloc),
+  renderPasses(alloc) {}
+
+// ContinuousContainer
+void ResourceGraph::reserve(vertices_size_type sz) {
+    _vertices.reserve(sz);
+    names.reserve(sz);
+    descs.reserve(sz);
+    traits.reserve(sz);
+    states.reserve(sz);
+    samplerInfo.reserve(sz);
+}
+
+ResourceGraph::Vertex::Vertex(const allocator_type& alloc) noexcept
+: outEdges(alloc),
+  inEdges(alloc) {}
+
+ResourceGraph::Vertex::Vertex(Vertex&& rhs, const allocator_type& alloc)
+: outEdges(std::move(rhs.outEdges), alloc),
+  inEdges(std::move(rhs.inEdges), alloc),
+  handle(std::move(rhs.handle)) {}
+
+ResourceGraph::Vertex::Vertex(Vertex const& rhs, const allocator_type& alloc)
+: outEdges(rhs.outEdges, alloc),
+  inEdges(rhs.inEdges, alloc),
+  handle(rhs.handle) {}
 
 ComputePass::ComputePass(const allocator_type& alloc) noexcept
 : computeViews(alloc) {}
@@ -175,46 +180,6 @@ ComputePass::ComputePass(ComputePass&& rhs, const allocator_type& alloc)
 ComputePass::ComputePass(ComputePass const& rhs, const allocator_type& alloc)
 : computeViews(rhs.computeViews, alloc) {}
 
-CopyPair::CopyPair(const allocator_type& alloc) noexcept
-: source(alloc),
-  target(alloc) {}
-
-CopyPair::CopyPair(ccstd::pmr::string sourceIn, ccstd::pmr::string targetIn, uint32_t mipLevelsIn, uint32_t numSlicesIn, uint32_t sourceMostDetailedMipIn, uint32_t sourceFirstSliceIn, uint32_t sourcePlaneSliceIn, uint32_t targetMostDetailedMipIn, uint32_t targetFirstSliceIn, uint32_t targetPlaneSliceIn, const allocator_type& alloc) noexcept // NOLINT
-: source(std::move(sourceIn), alloc),
-  target(std::move(targetIn), alloc),
-  mipLevels(mipLevelsIn),
-  numSlices(numSlicesIn),
-  sourceMostDetailedMip(sourceMostDetailedMipIn),
-  sourceFirstSlice(sourceFirstSliceIn),
-  sourcePlaneSlice(sourcePlaneSliceIn),
-  targetMostDetailedMip(targetMostDetailedMipIn),
-  targetFirstSlice(targetFirstSliceIn),
-  targetPlaneSlice(targetPlaneSliceIn) {}
-
-CopyPair::CopyPair(CopyPair&& rhs, const allocator_type& alloc)
-: source(std::move(rhs.source), alloc),
-  target(std::move(rhs.target), alloc),
-  mipLevels(rhs.mipLevels),
-  numSlices(rhs.numSlices),
-  sourceMostDetailedMip(rhs.sourceMostDetailedMip),
-  sourceFirstSlice(rhs.sourceFirstSlice),
-  sourcePlaneSlice(rhs.sourcePlaneSlice),
-  targetMostDetailedMip(rhs.targetMostDetailedMip),
-  targetFirstSlice(rhs.targetFirstSlice),
-  targetPlaneSlice(rhs.targetPlaneSlice) {}
-
-CopyPair::CopyPair(CopyPair const& rhs, const allocator_type& alloc)
-: source(rhs.source, alloc),
-  target(rhs.target, alloc),
-  mipLevels(rhs.mipLevels),
-  numSlices(rhs.numSlices),
-  sourceMostDetailedMip(rhs.sourceMostDetailedMip),
-  sourceFirstSlice(rhs.sourceFirstSlice),
-  sourcePlaneSlice(rhs.sourcePlaneSlice),
-  targetMostDetailedMip(rhs.targetMostDetailedMip),
-  targetFirstSlice(rhs.targetFirstSlice),
-  targetPlaneSlice(rhs.targetPlaneSlice) {}
-
 CopyPass::CopyPass(const allocator_type& alloc) noexcept
 : copyPairs(alloc) {}
 
@@ -223,37 +188,6 @@ CopyPass::CopyPass(CopyPass&& rhs, const allocator_type& alloc)
 
 CopyPass::CopyPass(CopyPass const& rhs, const allocator_type& alloc)
 : copyPairs(rhs.copyPairs, alloc) {}
-
-MovePair::MovePair(const allocator_type& alloc) noexcept
-: source(alloc),
-  target(alloc) {}
-
-MovePair::MovePair(ccstd::pmr::string sourceIn, ccstd::pmr::string targetIn, uint32_t mipLevelsIn, uint32_t numSlicesIn, uint32_t targetMostDetailedMipIn, uint32_t targetFirstSliceIn, uint32_t targetPlaneSliceIn, const allocator_type& alloc) noexcept // NOLINT
-: source(std::move(sourceIn), alloc),
-  target(std::move(targetIn), alloc),
-  mipLevels(mipLevelsIn),
-  numSlices(numSlicesIn),
-  targetMostDetailedMip(targetMostDetailedMipIn),
-  targetFirstSlice(targetFirstSliceIn),
-  targetPlaneSlice(targetPlaneSliceIn) {}
-
-MovePair::MovePair(MovePair&& rhs, const allocator_type& alloc)
-: source(std::move(rhs.source), alloc),
-  target(std::move(rhs.target), alloc),
-  mipLevels(rhs.mipLevels),
-  numSlices(rhs.numSlices),
-  targetMostDetailedMip(rhs.targetMostDetailedMip),
-  targetFirstSlice(rhs.targetFirstSlice),
-  targetPlaneSlice(rhs.targetPlaneSlice) {}
-
-MovePair::MovePair(MovePair const& rhs, const allocator_type& alloc)
-: source(rhs.source, alloc),
-  target(rhs.target, alloc),
-  mipLevels(rhs.mipLevels),
-  numSlices(rhs.numSlices),
-  targetMostDetailedMip(rhs.targetMostDetailedMip),
-  targetFirstSlice(rhs.targetFirstSlice),
-  targetPlaneSlice(rhs.targetPlaneSlice) {}
 
 MovePass::MovePass(const allocator_type& alloc) noexcept
 : movePairs(alloc) {}
@@ -359,7 +293,7 @@ RenderData::RenderData(RenderData&& rhs, const allocator_type& alloc)
 
 RenderGraph::RenderGraph(const allocator_type& alloc) noexcept
 : objects(alloc),
-  vertices(alloc),
+  _vertices(alloc),
   names(alloc),
   layoutNodes(alloc),
   data(alloc),
@@ -380,7 +314,7 @@ RenderGraph::RenderGraph(const allocator_type& alloc) noexcept
 
 RenderGraph::RenderGraph(RenderGraph&& rhs, const allocator_type& alloc)
 : objects(std::move(rhs.objects), alloc),
-  vertices(std::move(rhs.vertices), alloc),
+  _vertices(std::move(rhs._vertices), alloc),
   names(std::move(rhs.names), alloc),
   layoutNodes(std::move(rhs.layoutNodes), alloc),
   data(std::move(rhs.data), alloc),
@@ -402,7 +336,7 @@ RenderGraph::RenderGraph(RenderGraph&& rhs, const allocator_type& alloc)
 // ContinuousContainer
 void RenderGraph::reserve(vertices_size_type sz) {
     objects.reserve(sz);
-    vertices.reserve(sz);
+    _vertices.reserve(sz);
     names.reserve(sz);
     layoutNodes.reserve(sz);
     data.reserve(sz);

@@ -1,19 +1,18 @@
 /****************************************************************************
- Copyright (c) 2021 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2021-2023 Xiamen Yaji Software Co., Ltd.
  
  http://www.cocos.com
  
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
- 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
- 
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
+
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
+
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -21,7 +20,7 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- ****************************************************************************/
+****************************************************************************/
 #include "3d/models/BakedSkinningModel.h"
 #include "3d/assets/Mesh.h"
 //#include "3d/skeletal-animation/DataPoolManager.h"
@@ -114,15 +113,20 @@ void BakedSkinningModel::updateUBOs(uint32_t stamp) {
     Super::updateUBOs(stamp);
 
     IAnimInfo &info = _jointMedium.animInfo;
-    int idx = _instAnimInfoIdx;
+    const int idx = _instAnimInfoIdx;
     const float *curFrame = info.curFrame;
-    uint32_t frameDataBytes = info.frameDataBytes;
-    //    float curFrame = info.data[0];
-    //    uint32_t curFrameDataBytes = info.data.byteLength();
-    if (idx >= 0) {
-        auto &views = getInstancedAttributeBlock().views[idx];
-        setTypedArrayValue(views, 0, *curFrame);
-    } else if (*info.dirtyForJSB != 0) {
+    bool hasNonInstancingPass = false;
+    for (const auto &subModel : _subModels) {
+        if (idx >= 0) {
+            auto &views = subModel->getInstancedAttributeBlock().views[idx];
+            setTypedArrayValue(views, 0, *curFrame);
+        } else {
+            hasNonInstancingPass = true;
+        }
+    }
+
+    const uint32_t frameDataBytes = info.frameDataBytes;
+    if (hasNonInstancingPass && *info.dirtyForJSB != 0) {
         info.buffer->update(curFrame, frameDataBytes);
         *info.dirtyForJSB = 0;
     }
@@ -177,21 +181,24 @@ void BakedSkinningModel::updateLocalDescriptors(index_t subModelIndex, gfx::Desc
     }
 }
 
-void BakedSkinningModel::updateInstancedAttributes(const ccstd::vector<gfx::Attribute> &attributes, scene::Pass *pass) {
-    Super::updateInstancedAttributes(attributes, pass);
-    _instAnimInfoIdx = getInstancedAttributeIndex(INST_JOINT_ANIM_INFO);
+void BakedSkinningModel::updateInstancedAttributes(const ccstd::vector<gfx::Attribute> &attributes, scene::SubModel *subModel) {
+    Super::updateInstancedAttributes(attributes, subModel);
+    _instAnimInfoIdx = subModel->getInstancedAttributeIndex(INST_JOINT_ANIM_INFO);
     updateInstancedJointTextureInfo();
 }
 
 void BakedSkinningModel::updateInstancedJointTextureInfo() {
     const auto &jointTextureInfo = _jointMedium.jointTextureInfo;
     const IAnimInfo &animInfo = _jointMedium.animInfo;
-    index_t idx = _instAnimInfoIdx;
-    if (idx >= 0) {
-        auto &view = getInstancedAttributeBlock().views[idx];
-        setTypedArrayValue(view, 0, *animInfo.curFrame); //NOTE: curFrame is only used in JSB.
-        setTypedArrayValue(view, 1, jointTextureInfo[1]);
-        setTypedArrayValue(view, 2, jointTextureInfo[2]);
+    const index_t idx = _instAnimInfoIdx;
+    for (const auto &subModel : _subModels) {
+        auto &views = subModel->getInstancedAttributeBlock().views;
+        if (idx >= 0 && !views.empty()) {
+            auto &view = views[idx];
+            setTypedArrayValue(view, 0, *animInfo.curFrame); //NOTE: curFrame is only used in JSB.
+            setTypedArrayValue(view, 1, jointTextureInfo[1]);
+            setTypedArrayValue(view, 2, jointTextureInfo[2]);
+        }
     }
 }
 

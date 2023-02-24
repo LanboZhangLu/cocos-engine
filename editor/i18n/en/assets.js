@@ -99,9 +99,11 @@ module.exports = {
             flipVertical: 'Flip Vertical',
             flipVerticalTip: 'Flip Vertical',
             fixAlphaTransparencyArtifacts: 'Fix Alpha Transparency Artifacts',
-            fixAlphaTransparencyArtifactsTip: 'Fill transparent pixels with color of neareast solid pixel. These filled pixels would fix the dark halos at transparent borders of textures. Please turn on this option when you use the Alpha transparency channel in textures.',
+            fixAlphaTransparencyArtifactsTip:
+                'Fill transparent pixels with color of neareast solid pixel. These filled pixels would fix the dark halos at transparent borders of textures. Please turn on this option when you use the Alpha transparency channel in textures.',
             isRGBE: 'Is RGBE',
             isRGBETip: 'Is RGBE',
+            flipGreenChannel: 'Flip Green Channel',
         },
         spriteFrame: {
             packable: 'Packable',
@@ -242,7 +244,7 @@ module.exports = {
                 },
                 materialDumpDir: {
                     name: 'Material Dump Directory',
-                    title: 'The directory to dump the materials.\nDefault to a direct sub-folder named `Materials_${model-file-base-name}` under current path.',
+                    title: 'The directory to dump the materials.<br>Default to a direct sub-folder named `Materials_${model-file-base-name}` under current path.',
                 },
                 useVertexColors: {
                     name: 'Use Vertex Colors',
@@ -329,7 +331,48 @@ module.exports = {
                         title: 'Verbose Output',
                     },
                 },
-                // eslint-disable-next-line max-len
+                algorithm: {
+                    name: 'Algorithm',
+                    simplify: 'simplify',
+                    gltfpack: 'gltfpack (deprecated)',
+                },
+                simplify:{
+                    targetRatio: {
+                        name: 'Ratio',
+                        title: 'Target Ratio',
+                    },
+                    preserveSurfaceCurvature: {
+                        name: 'Surface Curvature',
+                        title: 'Preserve Surface Curvature',
+                    },
+                    preserveBorderEdges: {
+                        name: 'Border Edges',
+                        title: 'Preserve Border Edges',
+                    },
+                    preserveUVSeamEdges: {
+                        name: 'UV Seam Edges',
+                        title: 'Preserve UV Seam Edges',
+                    },
+                    preserveUVFoldoverEdges: {
+                        name: 'UV Foldover Edges',
+                        title: 'Preserve UV Foldover Edges',
+                    },
+                    enableSmartLink: {
+                        name: 'Smart Link',
+                        title: 'Enable Smart Link',
+                    },
+                    agressiveness: {
+                        name: 'Agressiveness',
+                        title: 'Agressiveness',
+                    },
+                    maxIterationCount: {
+                        name: 'Max Iteration Count',
+                        title: 'Max Iteration Count',
+                    },
+                },
+                gltfpack: {
+                    warn: 'The current asset uses the gltfpack mesh optimization algorithm, which has been deprecated. Please use the new simplify face reduction algorithm.',
+                },
                 warn: 'Warning: After optimization, the number and names of mesh resources will change, which will cause the loss of resources referenced by the components, please update them manually in time. (In addition, for prefabs pre-generated in the model resources, the resource synchronization mechanism will update them automatically)',
             },
             animationBakeRate: {
@@ -341,8 +384,15 @@ module.exports = {
                 name: 'Promote Single Root Node',
                 title:
                     'If enabled and there is only one root node in model scene, <br>' +
-                    'the single node becomes prefab\'s root after importing.  <br>' +
+                    "the single node becomes prefab's root after importing.  <br>" +
                     "Otherwise, each root node of the scene becomes prefab's child node.",
+            },
+            generateLightmapUVNode: {
+                name: 'Generate Lightmap UV',
+                title:
+                    'If enabled ,create a lightmap uv in the second UV channel, <br>' +
+                    'If the second uv already exists , the set will be override .  <br>' +
+                    "Otherwise, use default uvs.",
             },
             preferLocalTimeSpan: {
                 name: 'Prefer Local Time Span',
@@ -387,7 +437,7 @@ module.exports = {
             illegalFbx: 'Import Skeleton Failed: this fbx asset has not contained sub prefab asset.',
             nodeEnableTip: 'Whether to enable this joint and its descendants.;<br>Alt + Click only toggle the state of itself.',
         },
-        multipleWarning: 'Multi-select editing of this type of asset is not supported',
+        multipleWarning: 'Multi-select editing of this type of asset is not supported.',
         check_is_saved: {
             message: 'The modified data has not been saved. Do you want to save it?',
             assetMessage: "${assetName} is modified, it's data has not been saved. Do you want to save it?",
@@ -408,7 +458,8 @@ module.exports = {
         reset_node: 'Reset',
         reset_node_position: 'Reset Position',
         reset_node_rotation: 'Reset Rotation',
-        reset_node_scale: 'Reset Scale ',
+        reset_node_scale: 'Reset Scale',
+        reset_node_mobility: 'Reset Mobility',
 
         copy_node_value: 'Copy Node Values',
         paste_node_value: 'Paste Node Values',

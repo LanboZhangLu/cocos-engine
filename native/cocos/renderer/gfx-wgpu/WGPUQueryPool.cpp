@@ -1,18 +1,17 @@
 /****************************************************************************
- Copyright (c) 2019-2021 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2019-2023 Xiamen Yaji Software Co., Ltd.
 
  http://www.cocos.com
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -36,7 +35,7 @@ CCWGPUQueryPool::CCWGPUQueryPool() {
 }
 
 CCWGPUQueryPool::~CCWGPUQueryPool() {
-    destroy();
+    doDestroy();
 }
 
 void CCWGPUQueryPool::doInit(const QueryPoolInfo & /*info*/) {
@@ -46,14 +45,14 @@ void CCWGPUQueryPool::doInit(const QueryPoolInfo & /*info*/) {
     _gpuQueryPool->maxQueryObjects = _maxQueryObjects;
     _gpuQueryPool->idPool.resize(_maxQueryObjects, 0U);
 
-    //TODO_Zeqiang: wgpu query
+    // TODO_Zeqiang: wgpu query
 
-    //cmdFuncGLES3CreateQuery(device, _gpuQueryPool);
+    // cmdFuncGLES3CreateQuery(device, _gpuQueryPool);
 }
 
 void CCWGPUQueryPool::doDestroy() {
     if (_gpuQueryPool) {
-        //cmdFuncGLES3DestroyQuery(GLES3Device::getInstance(), _gpuQueryPool);
+        // cmdFuncGLES3DestroyQuery(GLES3Device::getInstance(), _gpuQueryPool);
         delete _gpuQueryPool;
         _gpuQueryPool = nullptr;
     }

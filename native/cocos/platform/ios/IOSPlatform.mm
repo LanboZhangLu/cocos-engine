@@ -110,6 +110,16 @@ int32_t IOSPlatform::init() {
     return 0;
 }
 
+void IOSPlatform::exit() {
+    if(_requestExit) {
+        // Manual quit requires a call to onDestory.
+        onDestroy();
+        ::exit(0);
+    } else {
+        _quitLoop = true;
+    }
+}
+
 int32_t IOSPlatform::loop() {
     cocos_main(0, nullptr);
     [_timer start];
@@ -133,7 +143,7 @@ void IOSPlatform::onPause() {
 
     cc::WindowEvent ev;
     ev.type = cc::WindowEvent::Type::HIDDEN;
-    dispatchEvent(ev);
+    cc::events::WindowEvent::broadcast(ev);
 }
 
 void IOSPlatform::onResume() {
@@ -141,13 +151,29 @@ void IOSPlatform::onResume() {
 
     cc::WindowEvent ev;
     ev.type = cc::WindowEvent::Type::SHOW;
-    dispatchEvent(ev);
+    cc::events::WindowEvent::broadcast(ev);
 }
 
 void IOSPlatform::onClose() {
     cc::WindowEvent ev;
     ev.type = cc::WindowEvent::Type::CLOSE;
-    dispatchEvent(ev);
+    cc::events::WindowEvent::broadcast(ev);
+}
+
+void IOSPlatform::requestExit() {
+    _requestExit = true;
+    onClose();
+}
+
+void IOSPlatform::onDestroy() {
+    if(!_requestExit) {
+        // ios exit process is special because it needs to wait for ts layer to destroy resources.
+        // The timer cannot be used here.
+        while (!_quitLoop) {
+            runTask();
+        }
+    }
+    UniversalPlatform::onDestroy();
 }
 
 ISystemWindow *IOSPlatform::createNativeWindow(uint32_t windowId, void *externalHandle) {

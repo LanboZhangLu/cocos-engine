@@ -1,18 +1,17 @@
 /****************************************************************************
- Copyright (c) 2020-2021 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2020-2023 Xiamen Yaji Software Co., Ltd.
 
  http://www.cocos.com
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -24,9 +23,10 @@
 ****************************************************************************/
 
 #pragma once
-
-#include <emscripten/bind.h>
-#include <set>
+#ifdef CC_WGPU_WASM
+    #include "WGPUDef.h"
+#endif
+#include "base/std/container/set.h"
 #include "gfx-base/GFXDescriptorSetLayout.h"
 
 namespace cc {
@@ -37,29 +37,37 @@ class CCWGPUTexture;
 class CCWGPUBuffer;
 class CCWGPUSampler;
 
-class CCWGPUDescriptorSetLayout final : public emscripten::wrapper<DescriptorSetLayout> {
+class CCWGPUDescriptorSetLayout final : public DescriptorSetLayout {
 public:
-    EMSCRIPTEN_WRAPPER(CCWGPUDescriptorSetLayout);
     CCWGPUDescriptorSetLayout();
-    ~CCWGPUDescriptorSetLayout() = default;
+    ~CCWGPUDescriptorSetLayout();
 
     inline CCWGPUBindGroupLayoutObject *gpuLayoutEntryObject() { return _gpuLayoutEntryObj; }
 
-    void updateLayout(uint8_t binding, const CCWGPUBuffer *buffer = nullptr, const CCWGPUTexture *tex = nullptr, const CCWGPUSampler *sampler = nullptr);
+    void updateBufferLayout(uint8_t binding, const CCWGPUBuffer *buffer);
+    void updateTextureLayout(uint8_t binding, const CCWGPUTexture *texture);
+    void updateSamplerLayout(uint8_t binding, const CCWGPUSampler *sampler);
 
-    void prepare(bool forceUpdate = false);
+    void prepare(ccstd::set<uint8_t> &bindingInUse, bool forceUpdate = false);
 
     inline uint8_t dynamicOffsetCount() { return _dynamicOffsetCount; }
 
     static void *defaultBindGroupLayout();
+    static void *getBindGroupLayoutByHash(ccstd::hash_t hash);
 
     void print() const;
+
+    ccstd::hash_t getHash() {
+        return _hash;
+    }
 
 protected:
     void doInit(const DescriptorSetLayoutInfo &info) override;
     void doDestroy() override;
 
-    size_t hash() const;
+    ccstd::hash_t hash() const;
+    ccstd::hash_t _hash{0};
+    bool _internalChanged{false};
 
     CCWGPUBindGroupLayoutObject *_gpuLayoutEntryObj = nullptr;
 

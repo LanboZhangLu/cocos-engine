@@ -1,18 +1,17 @@
 /*
- Copyright (c) 2021 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2021-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
-  worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
-  not use Cocos Creator software for developing other software or tools that's
-  used for developing games. You are not granted to publish, distribute,
-  sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -23,13 +22,13 @@
  THE SOFTWARE.
 */
 
-import { legacyCC } from '../../core/global-exports';
 import { SpriteFrame } from '../../2d/assets/sprite-frame';
 import type { ImageSource }  from '../assets/image-asset';
 import assetManager from '../asset-manager/asset-manager';
 import { BuiltinBundleName } from '../asset-manager/shared';
-import { TEST } from 'internal:constants';
-import { Settings, settings } from '../../core/settings';
+import { TEST, EDITOR } from 'internal:constants';
+import Bundle from '../asset-manager/bundle';
+import { Settings, settings, cclegacy } from '../../core';
 import releaseManager from '../asset-manager/release-manager';
 
 declare const jsb: any;
@@ -71,8 +70,8 @@ builtinResMgrProto.init = function (): Promise<void> {
     blackTexture.image = imgAsset;
     resources[blackTexture._uuid] = blackTexture;
 
-    if (legacyCC.SpriteFrame) {
-        const spriteFrame = new legacyCC.SpriteFrame() as SpriteFrame;
+    if (cclegacy.SpriteFrame) {
+        const spriteFrame = new cclegacy.SpriteFrame() as SpriteFrame;
         const image = imgAsset;
         const texture = new Texture2D();
         texture.image = image;
@@ -80,6 +79,27 @@ builtinResMgrProto.init = function (): Promise<void> {
         spriteFrame._uuid = 'default-spriteframe';
         resources[spriteFrame._uuid] = spriteFrame;
     }
+    if (EDITOR) {
+        const builtinAssets = settings.querySettings<string[]>(Settings.Category.ENGINE, 'builtinAssets');
+        const builtinBundle = new Bundle();
+        builtinBundle.init({
+            name: BuiltinBundleName.INTERNAL,
+            uuids: builtinAssets || [],
+            deps: [],
+            importBase: '',
+            nativeBase: '',
+            base: '',
+            paths: {},
+            scenes: {},
+            packs: {},
+            versions: { import: [], native: [] },
+            redirect: [],
+            debug: false,
+            types: [],
+            extensionMap: {},
+        });
+    }
+
 
     this.initBuiltinRes();
 };
@@ -118,9 +138,10 @@ builtinResMgrProto.loadBuiltinAssets = function () {
                     assets.forEach((asset) => {
                         resources[asset.name] = asset;
                         const url = asset.nativeUrl;
-                        releaseManager.addIgnoredAsset(asset);
+                        // In Editor, no need to ignore asset destroy, we use auto gc to handle destroy
+                        if (!EDITOR || cclegacy.GAME_VIEW) releaseManager.addIgnoredAsset(asset);
                         this.addAsset(asset.name, asset);
-                        if (asset instanceof legacyCC.Material) {
+                        if (asset instanceof cclegacy.Material) {
                             this._materialsToBeCompiled.push(asset);
                         }
                     });
@@ -131,5 +152,5 @@ builtinResMgrProto.loadBuiltinAssets = function () {
    });
 }
 
-const builtinResMgr = legacyCC.builtinResMgr = BuiltinResMgr.getInstance();
+const builtinResMgr = cclegacy.builtinResMgr = BuiltinResMgr.getInstance();
 export { builtinResMgr };

@@ -1,18 +1,17 @@
 /*
- Copyright (c) 2020-2022 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2020-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -21,7 +20,7 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- */
+*/
 
 import { EDITOR } from 'internal:constants';
 import { TrackEntryListeners } from './track-entry-listeners';
@@ -30,13 +29,12 @@ import SkeletonCache, { AnimationCache, AnimationFrame } from './skeleton-cache'
 import { AttachUtil } from './attach-util';
 import { ccclass, executeInEditMode, help, menu } from '../core/data/class-decorator';
 import { UIRenderer } from '../2d/framework/ui-renderer';
-import { Node, CCClass, CCObject, Color, Enum, ccenum, logID, warn, RecyclePool } from '../core';
+import { CCClass, CCObject, Color, Enum, ccenum, logID, warn, RecyclePool, js } from '../core';
 import { displayName, displayOrder, editable, override, serializable, tooltip, type, visible } from '../core/data/decorators';
 import { SkeletonData } from './skeleton-data';
 import { VertexEffectDelegate } from './vertex-effect-delegate';
 import { Graphics } from '../2d/components/graphics';
 import { MaterialInstance } from '../render-scene';
-import { js } from '../core/utils/js';
 import { BlendFactor, BlendOp } from '../gfx';
 import { legacyCC } from '../core/global-exports';
 import { SkeletonSystem } from './skeleton-system';
@@ -45,6 +43,7 @@ import { RenderEntity, RenderEntityType } from '../2d/renderer/render-entity';
 import { RenderDrawInfo } from '../2d/renderer/render-draw-info';
 import { Material, Texture2D } from '../asset/assets';
 import { builtinResMgr } from '../asset/asset-manager';
+import { Node } from '../scene-graph';
 
 export const timeScale = 1.0;
 
@@ -161,6 +160,11 @@ export class Skeleton extends UIRenderer {
     public static AnimationCacheMode = AnimationCacheMode;
     get drawList () { return this._drawList; }
 
+    protected _updateBuiltinMaterial (): Material {
+        const material = builtinResMgr.get<Material>('default-spine-material');
+        return material;
+    }
+
     @override
     @type(Material)
     @displayOrder(0)
@@ -170,9 +174,16 @@ export class Skeleton extends UIRenderer {
     }
     set customMaterial (val) {
         this._customMaterial = val;
-        this._cleanMaterialCache();
-        this.setMaterial(this._customMaterial, 0);
+        this.updateMaterial();
         this.markForUpdateRenderData();
+    }
+
+    protected updateMaterial () {
+        let mat;
+        if (this._customMaterial) mat = this._customMaterial;
+        else mat = this._updateBuiltinMaterial();
+        this.setMaterial(mat, 0);
+        this._cleanMaterialCache();
     }
 
     /**
@@ -444,6 +455,20 @@ export class Skeleton extends UIRenderer {
             this._updateUseTint();
         }
     }
+    /*
+     * @en Enabled batch model, if skeleton is complex, do not enable batch, or will lower performance.
+     * @zh 开启合批，如果渲染大量相同纹理，且结构简单的骨骼动画，开启合批可以降低drawcall，否则请不要开启，cpu消耗会上升。
+    */
+    @editable
+    @tooltip('i18n:COMPONENT.skeleton.enabled_batch')
+    get enableBatch () { return this._enableBatch; }
+    set enableBatch (value) {
+        if (value !== this._enableBatch) {
+            this._enableBatch = value;
+            this._updateBatch();
+        }
+    }
+
     /**
      * @en
      * The bone sockets this animation component maintains.<br>
@@ -467,6 +492,7 @@ export class Skeleton extends UIRenderer {
     }
 
     get socketNodes () { return this._socketNodes; }
+
     // Frame cache
     /**
      * @internal
@@ -602,6 +628,9 @@ export class Skeleton extends UIRenderer {
     @visible(false)
     @serializable
     protected defaultAnimation = '';
+
+    @serializable
+    protected _enableBatch = false;
 
     @serializable
     protected _sockets: SpineSocket[] = [];
@@ -1336,6 +1365,13 @@ export class Skeleton extends UIRenderer {
         super.destroyRenderData();
     }
 
+    private getMaterialTemplate () : Material {
+        if (this.customMaterial !== null) return this.customMaterial;
+        if (this.material) return this.material;
+        this.updateMaterial();
+        return this.material!;
+    }
+
     public getMaterialForBlendAndTint (src: BlendFactor, dst: BlendFactor, type: SpineMaterialType): MaterialInstance {
         const key = `${type}/${src}/${dst}`;
         let inst = this._materialCache[key];
@@ -1343,20 +1379,7 @@ export class Skeleton extends UIRenderer {
             return inst;
         }
 
-        let material = this.customMaterial;
-        if (material === null) {
-            material = builtinResMgr.get<Material>('default-spine-material');
-        }
-
-        let useTwoColor = false;
-        switch (type) {
-        case SpineMaterialType.TWO_COLORED:
-            useTwoColor = true;
-            break;
-        case SpineMaterialType.COLORED_TEXTURED:
-        default:
-            break;
-        }
+        const material = this.getMaterialTemplate();
         const matInfo = {
             parent: material,
             subModelIdx: 0,
@@ -1377,7 +1400,12 @@ export class Skeleton extends UIRenderer {
                 }],
             },
         });
-        inst.recompileShaders({ TWO_COLORED: useTwoColor, USE_LOCAL: true });
+        let useTwoColor = false;
+        if (type === SpineMaterialType.TWO_COLORED) {
+            useTwoColor = true;
+        }
+        const useLocal = !this._enableBatch;
+        inst.recompileShaders({ TWO_COLORED: useTwoColor, USE_LOCAL: useLocal });
         return inst;
     }
 
@@ -1415,6 +1443,7 @@ export class Skeleton extends UIRenderer {
     }
 
     protected _render (batcher: Batcher2D) {
+        let indicesCount = 0;
         if (this.renderData && this._drawList) {
             const rd = this.renderData;
             const chunk = rd.chunk;
@@ -1422,20 +1451,17 @@ export class Skeleton extends UIRenderer {
             const meshBuffer = rd.getMeshBuffer()!;
             const origin = meshBuffer.indexOffset;
             // Fill index buffer
-            accessor.appendIndices(chunk.bufferId, rd.indices!);
             for (let i = 0; i < this._drawList.length; i++) {
                 this._drawIdx = i;
                 const dc = this._drawList.data[i];
                 if (dc.texture) {
-                    // Construct IA
-                    const ia = meshBuffer.requireFreeIA(batcher.device);
-                    ia.firstIndex = origin + dc.indexOffset;
-                    ia.indexCount = dc.indexCount;
-                    // Commit IA
-                    batcher.commitIA(this, ia, dc.texture, dc.material!, this.node);
+                    batcher.commitMiddleware(this, meshBuffer, origin + dc.indexOffset,
+                        dc.indexCount, dc.texture, dc.material!, this._enableBatch);
                 }
+                indicesCount += dc.indexCount;
             }
-            // this.node._static = true;
+            const subIndices = rd.indices!.subarray(0, indicesCount);
+            accessor.appendIndices(chunk.bufferId, subIndices);
         }
     }
 
@@ -1558,11 +1584,7 @@ export class Skeleton extends UIRenderer {
     }
     // if change use batch mode, just clear material cache
     protected _updateBatch () {
-        // let baseMaterial = this.getMaterial(0);
-        // if (baseMaterial) {
-        //     baseMaterial.define('CC_USE_MODEL', !this.enableBatch);
-        // }
-        // this._materialCache = {};
+        this._cleanMaterialCache();
         this.markForUpdateRenderData();
     }
 

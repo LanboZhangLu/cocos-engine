@@ -21,9 +21,7 @@
 #include "bindings/auto/jsb_assets_auto.h"
 #include "renderer/pipeline/GeometryRenderer.h"
 #include "renderer/pipeline/GlobalDescriptorSetManager.h"
-#include "renderer/pipeline/custom/LayoutGraphJsb.h"
 #include "renderer/pipeline/custom/RenderCommonJsb.h"
-#include "renderer/pipeline/custom/RenderGraphJsb.h"
 
 using namespace cc;
 using namespace cc::render;
@@ -42,7 +40,6 @@ using namespace cc::render;
 //  1. 'Ignore Section' should be placed before attribute definition and %import/%include
 //  2. namespace is needed
 //
-%ignore cc::render::PipelineRuntime::getMacros;
 %ignore cc::render::PipelineRuntime::setValue;
 %ignore cc::render::PipelineRuntime::isOcclusionQueryEnabled;
 %ignore cc::render::PipelineRuntime::resetRenderQueue;
@@ -73,6 +70,10 @@ using namespace cc::render;
 // Note: Should be placed before 'Attribute Section'
 %module_macro(CC_USE_GEOMETRY_RENDERER) cc::render::PipelineRuntime::geometryRenderer;
 
+// ----- Release Returned Cpp Object in GC Section ------
+%release_returned_cpp_object_in_gc(cc::render::Pipeline::addRasterPass);
+%release_returned_cpp_object_in_gc(cc::render::RasterPassBuilder::addQueue);
+
 // ----- Attribute Section ------
 // Brief: Define attributes ( JS properties with getter and setter )
 // Usage:
@@ -90,18 +91,20 @@ using namespace cc::render;
 //  4. 'Attribute Section' should be placed before 'Import Section' and 'Include Section'
 //
 %attribute(cc::render::PipelineRuntime, cc::gfx::Device*, device, getDevice);
+%attribute(cc::render::PipelineRuntime, cc::MacroRecord&, macros, getMacros);
 %attribute(cc::render::PipelineRuntime, cc::pipeline::GlobalDSManager*, globalDSManager, getGlobalDSManager);
 %attribute(cc::render::PipelineRuntime, cc::gfx::DescriptorSetLayout*, descriptorSetLayout, getDescriptorSetLayout);
 %attribute(cc::render::PipelineRuntime, cc::gfx::DescriptorSet*, descriptorSet, getDescriptorSet);
-%attribute(cc::render::PipelineRuntime, ccstd::vector<cc::gfx::CommandBuffer*>, commandBuffers, getCommandBuffers);
+%attribute(cc::render::PipelineRuntime, ccstd::vector<cc::gfx::CommandBuffer*>&, commandBuffers, getCommandBuffers);
 %attribute(cc::render::PipelineRuntime, cc::pipeline::PipelineSceneData*, pipelineSceneData, getPipelineSceneData);
 %attribute(cc::render::PipelineRuntime, ccstd::string&, constantMacros, getConstantMacros);
 %attribute(cc::render::PipelineRuntime, cc::scene::Model*, profiler, getProfiler, setProfiler);
 %attribute(cc::render::PipelineRuntime, cc::pipeline::GeometryRenderer*, geometryRenderer, getGeometryRenderer);
 %attribute(cc::render::PipelineRuntime, float, shadingScale, getShadingScale, setShadingScale);
+%attribute(cc::render::RenderNode, ccstd::string, name, getName, setName);
+%attribute(cc::render::RasterPassBuilder, bool, showStatistics, getShowStatistics, setShowStatistics);
 %attribute(cc::render::SceneVisitor, cc::pipeline::PipelineSceneData*, pipelineSceneData, getPipelineSceneData);
 %attribute(cc::render::SceneTask, cc::render::TaskType, taskType, getTaskType);
-%attribute(cc::render::Pipeline, cc::render::LayoutGraphBuilder*, layoutGraphBuilder, getLayoutGraphBuilder);
 
 // ----- Import Section ------
 // Brief: Import header files which are depended by 'Include Section'

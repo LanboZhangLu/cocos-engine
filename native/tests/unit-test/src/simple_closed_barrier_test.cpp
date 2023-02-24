@@ -42,7 +42,7 @@ TEST(simpleClosedBarrierTest, test11) {
 
     const auto& barrierMap = fgDispatcher.getBarriers();
     const auto& rag = fgDispatcher.resourceAccessGraph;
-    ExpectEq(rag.vertices.size() == 10, true);
+    ExpectEq(rag._vertices.size() == 10, true);
 
     // head
     const auto& head = barrierMap.at(0);
@@ -63,7 +63,7 @@ TEST(simpleClosedBarrierTest, test11) {
 
     const auto& node2 = barrierMap.at(2);
     ExpectEq(node2.blockBarrier.frontBarriers.empty(), true);
-    ExpectEq(node2.blockBarrier.rearBarriers.size() == 3, true);
+    ExpectEq(node2.blockBarrier.rearBarriers.size() == 2, true);
     ExpectEq(node2.subpassBarriers.empty(), true);
 
     // res3
@@ -138,7 +138,7 @@ TEST(simpleClosedBarrierTest, test11) {
 
     const auto& node7 = barrierMap.at(7);
     ExpectEq(node7.subpassBarriers.empty(), true);
-    ExpectEq(node7.blockBarrier.frontBarriers.empty(), false);
+    ExpectEq(node7.blockBarrier.frontBarriers.empty(), true);
     ExpectEq(node7.blockBarrier.rearBarriers.size() == 1, true);
 
     ExpectEq(node7.blockBarrier.rearBarriers[0].resourceID == 9, true);

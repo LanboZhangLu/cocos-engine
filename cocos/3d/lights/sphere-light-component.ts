@@ -1,15 +1,15 @@
 /*
  Copyright (c) 2013-2016 Chukong Technologies Inc.
- Copyright (c) 2017-2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2017-2023 Xiamen Yaji Software Co., Ltd.
 
  http://www.cocos2d-x.org
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
- in the Software without restriction, including without limitation the rights
- to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- copies of the Software, and to permit persons to whom the Software is
- furnished to do so, subject to the following conditions:
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
  The above copyright notice and this permission notice shall be included in
  all copies or substantial portions of the Software.
@@ -23,12 +23,13 @@
  THE SOFTWARE.
 */
 
-import { ccclass, help, executeInEditMode, menu, tooltip, type, displayOrder, serializable, formerlySerializedAs } from 'cc.decorator';
+import { ccclass, help, executeInEditMode, menu, tooltip, type, displayOrder, serializable, formerlySerializedAs,
+    editable, slide, rangeMin } from 'cc.decorator';
 import { scene } from '../../render-scene';
 import { Light, PhotometricTerm } from './light-component';
-import { legacyCC } from '../../core/global-exports';
+import { CCFloat, CCInteger, cclegacy } from '../../core';
 import { Camera } from '../../render-scene/scene';
-import { Root } from '../../core/root';
+import { Root } from '../../root';
 
 /**
  * @en The sphere light component, multiple sphere lights can be added to one scene.
@@ -60,8 +61,12 @@ export class SphereLight extends Light {
      */
     @displayOrder(-1)
     @tooltip('i18n:lights.luminous_flux')
+    @editable
+    @rangeMin(0)
+    @slide
+    @type(CCInteger)
     get luminousFlux () {
-        const isHDR = (legacyCC.director.root as Root).pipeline.pipelineSceneData.isHDR;
+        const isHDR = (cclegacy.director.root as Root).pipeline.pipelineSceneData.isHDR;
         if (isHDR) {
             return this._luminanceHDR * scene.nt2lm(this._size);
         } else {
@@ -69,7 +74,7 @@ export class SphereLight extends Light {
         }
     }
     set luminousFlux (val) {
-        const isHDR = (legacyCC.director.root as Root).pipeline.pipelineSceneData.isHDR;
+        const isHDR = (cclegacy.director.root as Root).pipeline.pipelineSceneData.isHDR;
         let result = 0;
         if (isHDR) {
             this._luminanceHDR = val / scene.nt2lm(this._size);
@@ -87,8 +92,12 @@ export class SphereLight extends Light {
      */
     @displayOrder(-1)
     @tooltip('i18n:lights.luminance')
+    @editable
+    @rangeMin(0)
+    @slide
+    @type(CCInteger)
     get luminance () {
-        const isHDR = (legacyCC.director.root as Root).pipeline.pipelineSceneData.isHDR;
+        const isHDR = (cclegacy.director.root as Root).pipeline.pipelineSceneData.isHDR;
         if (isHDR) {
             return this._luminanceHDR;
         } else {
@@ -96,7 +105,7 @@ export class SphereLight extends Light {
         }
     }
     set luminance (val) {
-        const isHDR = (legacyCC.director.root as Root).pipeline.pipelineSceneData.isHDR;
+        const isHDR = (cclegacy.director.root as Root).pipeline.pipelineSceneData.isHDR;
         if (isHDR) {
             this._luminanceHDR = val;
             this._light && (this._light.luminanceHDR = this._luminanceHDR);
@@ -113,6 +122,10 @@ export class SphereLight extends Light {
     @type(PhotometricTerm)
     @displayOrder(-2)
     @tooltip('i18n:lights.term')
+    @editable
+    @rangeMin(0)
+    @slide
+    @type(CCInteger)
     get term (): number {
         return this._term;
     }
@@ -127,6 +140,10 @@ export class SphereLight extends Light {
      * 光源大小。
      */
     @tooltip('i18n:lights.size')
+    @editable
+    @rangeMin(0)
+    @slide
+    @type(CCFloat)
     get size () {
         return this._size;
     }
@@ -142,6 +159,10 @@ export class SphereLight extends Light {
      * 光源范围。
      */
     @tooltip('i18n:lights.range')
+    @editable
+    @rangeMin(0)
+    @slide
+    @type(CCFloat)
     get range () {
         return this._range;
     }

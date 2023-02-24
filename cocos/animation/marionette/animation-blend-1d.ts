@@ -1,11 +1,38 @@
-import { serializable } from 'cc.decorator';
-import { ccclass } from '../../core/data/class-decorator';
+/*
+ Copyright (c) 2022-2023 Xiamen Yaji Software Co., Ltd.
+
+ https://www.cocos.com/
+
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
+
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
+
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ THE SOFTWARE.
+*/
+
+import { _decorator } from '../../core';
 import { createEval } from './create-eval';
 import { BindableNumber, bindOr, VariableType } from './parametric';
 import { MotionEvalContext } from './motion';
 import { AnimationBlend, AnimationBlendEval, AnimationBlendItem } from './animation-blend';
 import { blend1D } from './blend-1d';
 import { CLASS_NAME_PREFIX_ANIM } from '../define';
+import { AnimationGraphLayerWideBindingContext } from './animation-graph-context';
+import { ReadonlyClipOverrideMap } from './graph-eval';
+
+const { ccclass, serializable } = _decorator;
 
 @ccclass(`${CLASS_NAME_PREFIX_ANIM}AnimationBlend1DItem`)
 class AnimationBlend1DItem extends AnimationBlendItem {
@@ -14,12 +41,12 @@ class AnimationBlend1DItem extends AnimationBlendItem {
 
     public clone () {
         const that = new AnimationBlend1DItem();
-        this._assign(that);
+        this._copyTo(that);
         return that;
     }
 
-    protected _assign (that: AnimationBlend1DItem) {
-        super._assign(that);
+    protected _copyTo (that: AnimationBlend1DItem) {
+        super._copyTo(that);
         that.threshold = this.threshold;
         return that;
     }
@@ -46,15 +73,18 @@ export class AnimationBlend1D extends AnimationBlend {
 
     public clone () {
         const that = new AnimationBlend1D();
+        this.copyTo(that);
         that._items = this._items.map((item) => item.clone());
         that.param = this.param.clone();
         return that;
     }
 
-    public [createEval] (context: MotionEvalContext) {
-        const evaluation = new AnimationBlend1DEval(context, this, this._items, this._items.map(({ threshold }) => threshold), 0.0);
+    public [createEval] (context: AnimationGraphLayerWideBindingContext, clipOverrides: ReadonlyClipOverrideMap | null) {
+        const evaluation = new AnimationBlend1DEval(
+            context, clipOverrides, this, this._items, this._items.map(({ threshold }) => threshold), 0.0,
+        );
         const initialValue = bindOr(
-            context,
+            context.outerContext,
             this.param,
             VariableType.FLOAT,
             evaluation.setInput,
@@ -73,8 +103,12 @@ export declare namespace AnimationBlend1D {
 class AnimationBlend1DEval extends AnimationBlendEval {
     private declare _thresholds: readonly number[];
 
-    constructor (context: MotionEvalContext, base: AnimationBlend, items: AnimationBlendItem[], thresholds: readonly number[], input: number) {
-        super(context, base, items, [input]);
+    constructor (
+        context: AnimationGraphLayerWideBindingContext,
+        overrides: ReadonlyClipOverrideMap | null,
+        base: AnimationBlend, items: AnimationBlendItem[], thresholds: readonly number[], input: number,
+    ) {
+        super(context, overrides, base, items, [input]);
         this._thresholds = thresholds;
         this.doEval();
     }

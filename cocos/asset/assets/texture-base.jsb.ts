@@ -1,18 +1,17 @@
 /*
- Copyright (c) 2021 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2021-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
-  worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
-  not use Cocos Creator software for developing other software or tools that's
-  used for developing games. You are not granted to publish, distribute,
-  sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -23,8 +22,9 @@
  THE SOFTWARE.
 */
 import { ccclass, serializable } from 'cc.decorator';
+import { TEST, EDITOR } from 'internal:constants';
 import { deviceManager } from '../../gfx';
-import { legacyCC } from '../../core/global-exports';
+import { cclegacy } from '../../core';
 import { Filter, PixelFormat, WrapMode } from './asset-enum';
 import './asset';
 
@@ -120,9 +120,9 @@ textureBaseProto.getSamplerInfo = function () {
 
 const oldDestroy = textureBaseProto.destroy;
 textureBaseProto.destroy = function () {
-    if (legacyCC.director.root?.batcher2D) {
+    if (cclegacy.director.root?.batcher2D) {
         // legacyCC.director.root.batcher2D._releaseDescriptorSetCache(this.getHash());
-        legacyCC.director.root.batcher2D._releaseDescriptorSetCache(this.getGFXTexture(), this.getGFXSampler());
+        cclegacy.director.root.batcher2D._releaseDescriptorSetCache(this.getGFXTexture(), this.getGFXSampler());
     }
     // dispatch into C++ virtual function CCObject::destroy
     return oldDestroy.call(this);
@@ -133,16 +133,16 @@ textureBaseProto._onGFXSamplerUpdated = function (gfxSampler, samplerInfo) {
     this._samplerInfo = samplerInfo;
 };
 
-legacyCC.TextureBase = jsb.TextureBase;
+cclegacy.TextureBase = jsb.TextureBase;
 
 // handle meta data, it is generated automatically
 const TextureBaseProto = TextureBase.prototype;
-serializable(TextureBaseProto, '_format');
-serializable(TextureBaseProto, '_minFilter');
-serializable(TextureBaseProto, '_magFilter');
-serializable(TextureBaseProto, '_mipFilter');
-serializable(TextureBaseProto, '_wrapS');
-serializable(TextureBaseProto, '_wrapT');
-serializable(TextureBaseProto, '_wrapR');
-serializable(TextureBaseProto, '_anisotropy');
+serializable(TextureBaseProto, '_format', () => PixelFormat.RGBA8888);
+serializable(TextureBaseProto, '_minFilter', () => Filter.LINEAR);
+serializable(TextureBaseProto, '_magFilter', () => Filter.LINEAR);
+serializable(TextureBaseProto, '_mipFilter', () => Filter.NONE);
+serializable(TextureBaseProto, '_wrapS', () => WrapMode.REPEAT);
+serializable(TextureBaseProto, '_wrapT', () => WrapMode.REPEAT);
+serializable(TextureBaseProto, '_wrapR', () => WrapMode.REPEAT);
+serializable(TextureBaseProto, '_anisotropy', () => 0);
 ccclass('cc.TextureBase')(TextureBase);

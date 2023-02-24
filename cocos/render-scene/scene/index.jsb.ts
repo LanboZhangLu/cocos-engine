@@ -1,18 +1,17 @@
 /*
- Copyright (c) 2021 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2021-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -21,14 +20,15 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- */
-import { legacyCC } from '../../core/global-exports';
-import { Vec3 } from '../../core/math';
-import { Enum } from '../../core/value-types';
+*/
+import { Vec3, Enum, cclegacy } from '../../core';
 
 export type Ambient = jsb.Ambient;
 export const Ambient = jsb.Ambient;
-legacyCC.Ambient = Ambient;
+cclegacy.Ambient = Ambient;
+
+export const LODData = jsb.LODData;
+export const LODGroup = jsb.LODGroup;
 
 /**
  * Light related.
@@ -65,25 +65,35 @@ export enum LightType {
     DIRECTIONAL,
     SPHERE,
     SPOT,
+    POINT,
+    RANGED_DIRECTIONAL,
     UNKNOWN,
 }
 
 export const nt2lm = (size: number) => 4 * Math.PI * Math.PI * size * size;
 export const Light = jsb.Light;
 export type Light = jsb.Light;
-legacyCC.Light = jsb.Light;
+cclegacy.Light = jsb.Light;
 
 export const DirectionalLight = jsb.DirectionalLight;
 export type DirectionalLight = jsb.DirectionalLight;
-legacyCC.DirectionalLight = jsb.DirectionalLight;
+cclegacy.DirectionalLight = jsb.DirectionalLight;
 
 export const SpotLight = jsb.SpotLight;
 export type SpotLight = jsb.SpotLight;
-legacyCC.SpotLight = jsb.SpotLight;
+cclegacy.SpotLight = jsb.SpotLight;
 
 export const SphereLight = jsb.SphereLight;
 export type SphereLight = jsb.SphereLight;
-legacyCC.SphereLight = jsb.SphereLight;
+cclegacy.SphereLight = jsb.SphereLight;
+
+export const PointLight = jsb.PointLight;
+export type PointLight = jsb.PointLight;
+cclegacy.PointLight = jsb.PointLight;
+
+export const RangedDirectionalLight = jsb.RangedDirectionalLight;
+export type RangedDirectionalLight = jsb.RangedDirectionalLight;
+cclegacy.RangedDirectionalLight = jsb.RangedDirectionalLight;
 
 /**
  * Fog related.
@@ -127,7 +137,7 @@ export const FogInfo = jsb.FogInfo;
 export type FogInfo = jsb.FogInfo;
 export const Fog = jsb.Fog;
 export type Fog = jsb.Fog;
-legacyCC.Fog = Fog;
+cclegacy.Fog = Fog;
 
 /**
  * Shadows related.
@@ -285,14 +295,15 @@ export const EnvironmentLightingType = Enum({
 });
 export const ShadowsInfo = jsb.ShadowsInfo;
 export type ShadowsInfo = jsb.ShadowsInfo;
-export const Shadows = jsb.Shadow;
-export type Shadows = jsb.Shadow;
-legacyCC.Shadows = Shadows;
+export const Shadows = jsb.Shadows;
+export type Shadows = jsb.Shadows;
+cclegacy.Shadows = Shadows;
 
 export const Skybox = jsb.Skybox;
 export type Skybox = jsb.Skybox;
-legacyCC.Skybox = Skybox;
+cclegacy.Skybox = Skybox;
 
 export * from './model';
 export * from './submodel';
 export * from './camera';
+export * from './reflection-probe';

@@ -1,5 +1,30 @@
+/****************************************************************************
+ Copyright (c) 2022-2023 Xiamen Yaji Software Co., Ltd.
+
+ https://www.cocos.com/
+
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
+
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
+
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ THE SOFTWARE.
+****************************************************************************/
+
 #pragma once
 #include <webgpu/webgpu.h>
+#include "base/std/container/vector.h"
 #include "cocos/base/Macros.h"
 #include "cocos/base/TypeDef.h"
 #include "gfx-base/GFXDef-common.h"
@@ -146,6 +171,10 @@ static WGPUTextureSampleType textureSampleTypeTrait(Format format) {
     }
 }
 
+static bool isFilterable(Format format) {
+    return textureSampleTypeTrait(format) != WGPUTextureSampleType_UnfilterableFloat;
+}
+
 static WGPUTextureAspect textureAspectTrait(Format format) {
     switch (format) {
         case Format::DEPTH:
@@ -283,7 +312,7 @@ static WGPUAddressMode toWGPUAddressMode(Address addrMode) {
 static WGPUFilterMode toWGPUFilterMode(Filter filter) {
     switch (filter) {
         case Filter::NONE:
-            return WGPUFilterMode::WGPUFilterMode_Linear;
+            return WGPUFilterMode::WGPUFilterMode_Nearest;
         case Filter::POINT:
             return WGPUFilterMode::WGPUFilterMode_Nearest;
         case Filter::LINEAR:
@@ -364,9 +393,9 @@ static WGPUShaderStageFlags toWGPUShaderStageFlag(ShaderStageFlagBit flag) {
     return result;
 }
 
-//TODO_Zeqiang: more flexible strategy
+// TODO_Zeqiang: more flexible strategy
 static uint32_t toWGPUSampleCount(SampleCount sampleCount) {
-    //TODO_Zeqiang: msaa
+    // TODO_Zeqiang: msaa
     return 1;
     switch (sampleCount) {
         case SampleCount::ONE:
@@ -433,7 +462,7 @@ static WGPUBufferUsageFlags toWGPUBufferUsage(BufferUsageBit usage) {
     return res;
 }
 
-static WGPUColor toWGPUColor(const Color &color) {
+static WGPUColor toWGPUColor(const Color& color) {
     return WGPUColor{color.x, color.y, color.z, color.w};
 }
 
@@ -582,6 +611,59 @@ static WGPUFlags toWGPUColorWriteMask(ColorMask mask) {
 
     return result;
 }
+
+static ccstd::string getAdapterTypeName(WGPUAdapterType type) {
+    switch (type) {
+        case WGPUAdapterType_DiscreteGPU:
+            return "WGPUAdapterType_DiscreteGPU";
+        case WGPUAdapterType_IntegratedGPU:
+            return "WGPUAdapterType_IntegratedGPU";
+        case WGPUAdapterType_CPU:
+            return "WGPUAdapterType_CPU";
+        case WGPUAdapterType_Unknown:
+            return "WGPUAdapterType_Unknown";
+        default:
+            return "unknown adapter by cc.gfx!";
+    }
+}
+
+static ccstd::string getBackendTypeName(WGPUBackendType type) {
+    switch (type) {
+        case WGPUBackendType_Null:
+            return "WGPUBackendType_Null";
+        case WGPUBackendType_WebGPU:
+            return "WGPUBackendType_WebGPU";
+        case WGPUBackendType_D3D11:
+            return "WGPUBackendType_D3D11";
+        case WGPUBackendType_D3D12:
+            return "WGPUBackendType_D3D12";
+        case WGPUBackendType_Metal:
+            return "WGPUBackendType_Metal";
+        case WGPUBackendType_Vulkan:
+            return "WGPUBackendType_Vulkan";
+        case WGPUBackendType_OpenGL:
+            return "WGPUBackendType_OpenGL";
+        case WGPUBackendType_OpenGLES:
+            return "WGPUBackendType_OpenGLES";
+        default:
+            return "unknown backend by cc.gfx!";
+    }
+}
+
+class Texture;
+class CommandBuffer;
+// fromLevel and toLevel is included.
+void genMipMap(Texture* texture, uint8_t fromLevel, uint8_t levelCount, uint32_t baseLayer, CommandBuffer* cmdBuffer);
+
+class DescriptorSet;
+class PipelineLayout;
+// descriptor set layout in descriptor set not consistent with the binding in pipeline layout.
+void createPipelineLayoutFallback(const ccstd::vector<DescriptorSet*>& descriptorSets, PipelineLayout* pipelineLayout);
+
+class Texture;
+class CommandBuffer;
+void clearRect(CommandBuffer* cmdBuffer, Texture* texture, const Rect& renderArea, const Color& color);
+void genMipMap(Texture* texture, uint8_t fromLevel, uint8_t levelCount, uint32_t baseLayer, CommandBuffer* cmdBuffer);
 
 static constexpr WGPUColor defaultClearColor{0.2, 0.2, 0.2, 1.0};
 
